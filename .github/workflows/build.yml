@@ -1,101 +1,169 @@
-name: Build Redmi SM8450 Components
-
+name: Build Redmi SM8450 (vendor/dtb/dtbo)
 on:
   workflow_dispatch:
     inputs:
       device:
-        default: 'rubens'
+        description: "设备代号（默认Redmi K50 Ultra：rubens）"
+        required: true
+        default: "rubens"
         type: string
       build_type:
-        default: 'userdebug'
+        description: "编译类型（userdebug足够）"
+        required: true
+        default: "userdebug"
         type: choice
-        options: [user, userdebug, eng]
+        options:
+          - user
+          - userdebug
+          - eng
 
 jobs:
-  build:
+  build_core_components:
     runs-on: ubuntu-22.04
     steps:
-      - name: 强制拉取最新代码
+      # 步骤1：拉取当前仓库的配置文件（含manifest和脚本）
+      - name: Checkout repo configs
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1  # 仅拉取最新提交，减少占用
 
-      - name: 清理磁盘空间（关键步骤）
+      # 步骤2：极致清理磁盘（释放30+GB空间）
+      - name: Clean disk space (critical!)
         run: |
-          # 查看初始磁盘使用情况
+          # 查看初始空间
+          echo "=== Initial Disk Usage ==="
           df -h
+          du -sh /* | sort -rh | head -10
 
-          # 删除不必要的预装软件和文件
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /usr/local/share/boost
-          sudo rm -rf /var/cache/apt/archives/*
+          # 删除超大无用目录
+          sudo rm -rf /var/lib/docker          # Docker镜像（10+GB）
+          sudo rm -rf /usr/local/lib/android   # 残留Android SDK（5+GB）
+          sudo rm -rf /usr/share/dotnet        # .NET框架（5+GB）
+          sudo rm -rf /opt/ghc                 # Haskell编译器（3+GB）
+          sudo rm -rf /usr/local/share/boost   # Boost库（2+GB）
+          sudo rm -rf /var/cache/apt/archives  # APT缓存（2+GB）
+          sudo rm -rf /var/log/*               # 系统日志
+          sudo rm -rf /tmp/*                   # 临时文件
+          sudo rm -rf ~/.cache                 # 用户缓存
+
+          # 清理APT冗余包
           sudo apt clean
-          sudo apt autoremove -y
+          sudo apt autoremove -y --purge
+          sudo apt remove -y $(dpkg --list | grep '^ii' | grep -E 'docker|jdk8|python2' | awk '{print $2}')
 
-          # 移动Android源码到更大的临时分区（/mnt空间更大）
-          sudo mkdir -p /mnt/android
-          sudo chown -R $USER:$USER /mnt/android
+          # 查看清理后空间（确保/mnt有100+GB可用）
+          echo -e "\n=== Disk Usage After Cleanup ==="
+          df -h /mnt
 
-          # 再次查看清理后的磁盘使用情况
-          df -h
-
-      - name: 终极调试 - 显示文件路径
-        run: |
-          find . -name "redmi-sm8450.xml"
-          ls -la ./local_manifests/ || echo "local_manifests目录不存在"
-
-      - name: 安装依赖
+      # 步骤3：安装最小编译依赖（仅保留必需工具）
+      - name: Install minimal dependencies
         run: |
           sudo apt update
-          sudo apt install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib git git-lfs gnupg gperf imagemagick lib32ncurses5-dev lib32readline-dev lib32z1-dev libelf-dev liblz4-tool libncurses5 libncurses5-dev libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev openjdk-17-jdk
+          sudo apt install -y \
+            git git-lfs curl repo \
+            bc bison build-essential ccache flex \
+            g++-multilib gcc-multilib \
+            lib32ncurses5-dev lib32readline-dev lib32z1-dev \
+            libelf-dev liblz4-tool libncurses5-dev zlib1g-dev \
+            openjdk-17-jdk-headless  # 无头JDK（减少占用）
+
+          # 安装最新Repo工具
           sudo apt remove -y repo
-          curl https://storage.googleapis.com/git-repo-downloads/repo > ~/repo && chmod a+x ~/repo && sudo mv ~/repo /usr/local/bin/
+          curl https://storage.googleapis.com/git-repo-downloads/repo > ~/repo
+          chmod a+x ~/repo
+          sudo mv ~/repo /usr/local/bin/
 
-      - name: 同步源码（使用更大的临时分区）
+      # 步骤4：同步精简源码（仅核心仓库）
+      - name: Sync minimal source code
         run: |
-          # 使用/mnt分区存储源码（空间更大）
+          # 创建源码目录（使用/mnt大分区）
           mkdir -p /mnt/android/redmi && cd /mnt/android/redmi
-          repo init -u https://github.com/LineageOS/android.git -b lineage-20.0 --depth=1
-          mkdir -p .repo/local_manifests
 
-          # 复制清单文件
-          MANIFEST_PATH=$(find $GITHUB_WORKSPACE -name "redmi-sm8450.xml" | head -n 1)
+          # 初始化Repo（仅拉取最小配置）
+          repo init \
+            -u https://github.com/LineageOS/android.git \
+            -b lineage-20.0 \
+            --depth=1 \                  # 仅最新提交，无历史
+            --filter=blob:none \         # 仅拉取元数据，省空间
+            --no-clone-bundle            # 禁用压缩包，避免解压占用
+
+          # 复制精简的manifest文件
+          MANIFEST_PATH=$(find $GITHUB_WORKSPACE -name "redmi-sm8450.xml" | head -n1)
           if [ -z "$MANIFEST_PATH" ]; then
-            echo "❌ 找不到redmi-sm8450.xml"
+            echo "❌ Error: redmi-sm8450.xml not found!"
             exit 1
-          else
-            cp "$MANIFEST_PATH" .repo/local_manifests/
           fi
+          mkdir -p .repo/local_manifests && cp "$MANIFEST_PATH" .repo/local_manifests/
 
-          # 同步源码（限制并行数减少内存占用）
-          repo sync -c --no-clone-bundle --no-tags -j4
+          # 同步源码（低并行度，避免IO爆盘）
+          echo -e "\n=== Syncing Core Repos ==="
+          repo sync -c -j2 --no-tags --force-sync
 
-      - name: 应用补丁
+          # 查看同步后空间
+          echo -e "\n=== Disk Usage After Sync ==="
+          df -h /mnt
+
+      # 步骤5：编译目标组件（仅vendor/vendor_dlkm/dtb/dtbo）
+      - name: Build target components
         run: |
           cd /mnt/android/redmi
-          [ -f "$GITHUB_WORKSPACE/scripts/apply-patches.sh" ] && $GITHUB_WORKSPACE/scripts/apply-patches.sh || echo "跳过补丁"
 
-      - name: 编译组件（优化空间使用）
-        run: |
-          cd /mnt/android/redmi
-          # 限制ccache大小，避免占用过多空间
-          export USE_CCACHE=1
+          # 配置编译环境（禁用ccache节省空间，若需加速可改为USE_CCACHE=1）
+          export USE_CCACHE=0
           export CCACHE_EXEC=$(which ccache)
-          ccache -M 20G  # 减小缓存大小，默认50G可能太大
+          [ "$USE_CCACHE" = "1" ] && ccache -M 10G  # 限制ccache为10G
 
-          # 开始编译（减少并行数，避免IO压力过大）
-          $GITHUB_WORKSPACE/scripts/build.sh ${{ github.event.inputs.device }} ${{ github.event.inputs.build_type }}
+          # 初始化编译环境
+          source build/envsetup.sh
+          lunch ${{ github.event.inputs.device }}-${{ github.event.inputs.build_type }}
 
-      - name: 收集编译产物
+          # 编译vendor（解决文件加载异常）
+          echo -e "\n=== Building vendor.img ==="
+          make vendorimage -j$(nproc --all)
+
+          # 编译vendor_dlkm（解决显示异常）
+          echo -e "\n=== Building vendor_dlkm.img ==="
+          make vendor_dlkmimage -j$(nproc --all)
+
+          # 编译dtb/dtbo（解锁分区/电池容量）
+          echo -e "\n=== Building dtb + dtbo ==="
+          make dtb dtboimg -j$(nproc --all)
+
+          # 验证产物是否存在
+          REQUIRED_FILES=(
+            "out/target/product/${{ github.event.inputs.device }}/vendor.img"
+            "out/target/product/${{ github.event.inputs.device }}/vendor_dlkm.img"
+            "out/target/product/${{ github.event.inputs.device }}/dtb.img"
+            "out/target/product/${{ github.event.inputs.device }}/dtbo.img"
+          )
+          for file in "${REQUIRED_FILES[@]}"; do
+            if [ ! -f "$file" ]; then
+              echo "❌ Error: Missing product $file"
+              exit 1
+            fi
+          done
+          echo -e "\n=== All components built successfully! ==="
+
+      # 步骤6：收集产物并上传
+      - name: Collect and upload artifacts
         run: |
+          # 创建产物目录
           mkdir -p $GITHUB_WORKSPACE/out
-          cp /mnt/android/redmi/out/target/product/${{ github.event.inputs.device }}/*.img $GITHUB_WORKSPACE/out/ || echo "部分镜像未找到"
-          df -h  # 查看最终磁盘使用情况
 
-      - name: 上传编译产物
+          # 仅复制目标产物（避免冗余）
+          cp /mnt/android/redmi/out/target/product/${{ github.event.inputs.device }}/vendor.img $GITHUB_WORKSPACE/out/
+          cp /mnt/android/redmi/out/target/product/${{ github.event.inputs.device }}/vendor_dlkm.img $GITHUB_WORKSPACE/out/
+          cp /mnt/android/redmi/out/target/product/${{ github.event.inputs.device }}/dtb.img $GITHUB_WORKSPACE/out/
+          cp /mnt/android/redmi/out/target/product/${{ github.event.inputs.device }}/dtbo.img $GITHUB_WORKSPACE/out/
+
+          # 查看产物信息
+          echo -e "\n=== Built Products ==="
+          ls -lh $GITHUB_WORKSPACE/out/
+
+      # 步骤7：上传产物（保留7天）
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: redmi-artifacts-${{ github.event.inputs.device }}
-          path: out/
+          name: redmi-sm8450-${{ github.event.inputs.device }}-artifacts
+          path: $GITHUB_WORKSPACE/out/
           retention-days: 7
