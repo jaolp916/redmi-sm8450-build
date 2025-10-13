@@ -1,8 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <manifest>
-    <!-- 仅保留设备专属仓库，删除通用prebuilts（避免重复） -->
-    
-    <!-- 红米SM8450设备树（Redmi K50 Ultra 代号rubens） -->
+    <!-- 设备树（必需） -->
     <project 
         name="LineageOS/android_device_xiaomi_rubens" 
         path="device/xiaomi/rubens" 
@@ -10,7 +8,7 @@
         revision="lineage-20" 
     />
 
-    <!-- SM8450内核（编译dtb/dtbo必需） -->
+    <!-- 内核（编译dtb/dtbo必需） -->
     <project 
         name="LineageOS/android_kernel_xiaomi_sm8450" 
         path="kernel/xiaomi/sm8450" 
@@ -18,7 +16,7 @@
         revision="lineage-20" 
     />
 
-    <!-- 设备厂商库（编译vendor必需） -->
+    <!-- 厂商库（编译vendor必需） -->
     <project 
         name="LineageOS/android_vendor_xiaomi_rubens" 
         path="vendor/xiaomi/rubens" 
@@ -32,12 +30,25 @@
         revision="lineage-20" 
     />
 
-    <!-- 高通SM8450通用依赖（设备专属，不重复） -->
+    <!-- 高通通用依赖（必需） -->
     <project 
         name="LineageOS/android_device_qcom_sm8450-common" 
         path="device/qcom/sm8450-common" 
         remote="github" 
         revision="lineage-20" 
     />
+
+    <!-- 仅保留最核心的编译工具链（避免被exclude屏蔽） -->
+    <project 
+        name="platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9" 
+        path="prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9" 
+        remote="aosp" 
+        revision="master" 
+    />
+    <project 
+        name="platform/prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9" 
+        path="prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9" 
+        remote="aosp" 
+        revision="master" 
+    />
 </manifest>
-    
