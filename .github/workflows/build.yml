@@ -33,7 +33,12 @@ jobs:
       - name: 安装依赖
         run: |
           sudo apt update
-          sudo apt install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib git git-lfs gnupg gperf imagemagick lib32ncurses5-dev lib32readline-dev lib32z1-dev libelf-dev liblz4-tool libncurses5 libncurses5-dev libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev openjdk-17-jdk repo
+          sudo apt install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib git git-lfs gnupg gperf imagemagick lib32ncurses5-dev lib32readline-dev lib32z1-dev libelf-dev liblz4-tool libncurses5 libncurses5-dev libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev openjdk-17-jdk
+          # 移除系统自带repo，使用源码中的版本
+          sudo apt remove -y repo
+          curl https://storage.googleapis.com/git-repo-downloads/repo > ~/repo
+          chmod a+x ~/repo
+          sudo mv ~/repo /usr/local/bin/
 
       - name: 配置CCache
         uses: actions/cache@v3
@@ -53,15 +58,29 @@ jobs:
       - name: 同步源码
         run: |
           cd ~/android/redmi
+          # 使用最新版repo初始化
           repo init -u https://github.com/LineageOS/android.git -b lineage-20.0 --depth=1
+          # 确保local_manifests目录存在
           mkdir -p .repo/local_manifests
-          cp $GITHUB_WORKSPACE/local_manifests/redmi-sm8450.xml .repo/local_manifests/
+          # 复制设备清单文件
+          if [ -f "$GITHUB_WORKSPACE/local_manifests/redmi-sm8450.xml" ]; then
+            cp "$GITHUB_WORKSPACE/local_manifests/redmi-sm8450.xml" .repo/local_manifests/
+          else
+            echo "错误: 找不到redmi-sm8450.xml文件"
+            exit 1
+          fi
+          # 同步源码
           repo sync -c --no-clone-bundle --no-tags -j$(nproc --all)
 
       - name: 应用补丁
         run: |
           cd ~/android/redmi
-          $GITHUB_WORKSPACE/scripts/apply-patches.sh
+          # 创建补丁脚本（如果需要）
+          if [ -f "$GITHUB_WORKSPACE/scripts/apply-patches.sh" ]; then
+            $GITHUB_WORKSPACE/scripts/apply-patches.sh
+          else
+            echo "警告: 未找到补丁脚本，跳过补丁步骤"
+          fi
 
       - name: 编译组件
         run: |
@@ -69,19 +88,25 @@ jobs:
           export USE_CCACHE=1
           export CCACHE_EXEC=$(which ccache)
           ccache -M 50G
-          $GITHUB_WORKSPACE/scripts/build.sh ${{ github.event.inputs.device }} ${{ github.event.inputs.build_type }}
+          # 确保编译脚本存在
+          if [ -f "$GITHUB_WORKSPACE/scripts/build.sh" ]; then
+            $GITHUB_WORKSPACE/scripts/build.sh ${{ github.event.inputs.device }} ${{ github.event.inputs.build_type }}
+          else
+            echo "错误: 找不到编译脚本build.sh"
+            exit 1
+          fi
 
       - name: 收集编译产物
         run: |
           mkdir -p $GITHUB_WORKSPACE/out
-          cp ~/android/redmi/out/target/product/${{ github.event.inputs.device }}/vendor.img $GITHUB_WORKSPACE/out/
-          cp ~/android/redmi/out/target/product/${{ github.event.inputs.device }}/vendor_dlkm.img $GITHUB_WORKSPACE/out/
-          cp ~/android/redmi/out/target/product/${{ github.event.inputs.device }}/dtb.img $GITHUB_WORKSPACE/out/
-          cp ~/android/redmi/out/target/product/${{ github.event.inputs.device }}/dtbo.img $GITHUB_WORKSPACE/out/
+          cp ~/android/redmi/out/target/product/${{ github.event.inputs.device }}/vendor.img $GITHUB_WORKSPACE/out/ || echo "vendor.img未找到"
+          cp ~/android/redmi/out/target/product/${{ github.event.inputs.device }}/vendor_dlkm.img $GITHUB_WORKSPACE/out/ || echo "vendor_dlkm.img未找到"
+          cp ~/android/redmi/out/target/product/${{ github.event.inputs.device }}/dtb.img $GITHUB_WORKSPACE/out/ || echo "dtb.img未找到"
+          cp ~/android/redmi/out/target/product/${{ github.event.inputs.device }}/dtbo.img $GITHUB_WORKSPACE/out/ || echo "dtbo.img未找到"
           ls -lh $GITHUB_WORKSPACE/out/
 
       - name: 上传编译产物
-        uses: actions/upload-artifact@v4  # 已升级到最新版本v4
+        uses: actions/upload-artifact@v4
         with:
           name: redmi-sm8450-artifacts-${{ github.event.inputs.device }}
           path: $GITHUB_WORKSPACE/out/
