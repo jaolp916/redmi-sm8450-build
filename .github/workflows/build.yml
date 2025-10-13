@@ -4,110 +4,75 @@ on:
   workflow_dispatch:
     inputs:
       device:
-        description: '设备代号 (例如: rubens 对应Redmi K50 Ultra)'
-        required: true
         default: 'rubens'
         type: string
       build_type:
-        description: '编译类型'
-        required: true
         default: 'userdebug'
         type: choice
-        options:
-          - user
-          - userdebug
-          - eng
+        options: [user, userdebug, eng]
 
 jobs:
   build:
     runs-on: ubuntu-22.04
-    name: Build for ${{ github.event.inputs.device }}
-
     steps:
-      - name: 检查系统环境
+      - name: 强制拉取最新代码（包括所有分支和文件）
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 拉取所有历史，确保最新文件被包含
+
+      - name: 终极调试 - 显示所有文件路径
         run: |
-          echo "当前系统: $(lsb_release -d | cut -f2)"
-          echo "CPU核心数: $(nproc --all)"
-          echo "可用内存: $(free -h | awk '/^Mem:/ {print $2}')"
+          echo "当前工作目录：$(pwd)"
+          echo "列出仓库中所有包含'redmi-sm8450.xml'的文件："
+          find . -name "redmi-sm8450.xml"  # 搜索整个仓库找这个文件
+          echo "列出local_manifests目录的详细信息："
+          ls -la ./local_manifests/ || echo "local_manifests目录不存在"
 
       - name: 安装依赖
         run: |
           sudo apt update
           sudo apt install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib git git-lfs gnupg gperf imagemagick lib32ncurses5-dev lib32readline-dev lib32z1-dev libelf-dev liblz4-tool libncurses5 libncurses5-dev libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev openjdk-17-jdk
-          # 移除系统自带repo，使用源码中的版本
           sudo apt remove -y repo
-          curl https://storage.googleapis.com/git-repo-downloads/repo > ~/repo
-          chmod a+x ~/repo
-          sudo mv ~/repo /usr/local/bin/
+          curl https://storage.googleapis.com/git-repo-downloads/repo > ~/repo && chmod a+x ~/repo && sudo mv ~/repo /usr/local/bin/
 
-      - name: 配置CCache
-        uses: actions/cache@v3
-        with:
-          path: ~/.ccache
-          key: ${{ github.event.inputs.device }}-ccache-${{ github.sha }}
-          restore-keys: |
-            ${{ github.event.inputs.device }}-ccache-
-
-      - name: 准备源码目录
+      - name: 同步源码（使用绝对路径复制）
         run: |
-          mkdir -p ~/android/redmi
-          cd ~/android/redmi
-          git config --global user.email "action@github.com"
-          git config --global user.name "GitHub Action"
-
-      - name: 同步源码
-        run: |
-          cd ~/android/redmi
-          # 使用最新版repo初始化
+          mkdir -p ~/android/redmi && cd ~/android/redmi
           repo init -u https://github.com/LineageOS/android.git -b lineage-20.0 --depth=1
-          # 确保local_manifests目录存在
           mkdir -p .repo/local_manifests
-          # 复制设备清单文件
-          if [ -f "$GITHUB_WORKSPACE/local_manifests/redmi-sm8450.xml" ]; then
-            cp "$GITHUB_WORKSPACE/local_manifests/redmi-sm8450.xml" .repo/local_manifests/
-          else
-            echo "错误: 找不到redmi-sm8450.xml文件"
+
+          # 用find命令强制查找文件并复制（无视路径深度）
+          MANIFEST_PATH=$(find $GITHUB_WORKSPACE -name "redmi-sm8450.xml" | head -n 1)
+          if [ -z "$MANIFEST_PATH" ]; then
+            echo "❌ 彻底找不到redmi-sm8450.xml，请检查文件是否存在于仓库中"
             exit 1
+          else
+            echo "找到文件：$MANIFEST_PATH，开始复制..."
+            cp "$MANIFEST_PATH" .repo/local_manifests/
+            echo "复制后验证："
+            ls -la .repo/local_manifests/redmi-sm8450.xml
           fi
-          # 同步源码
+
           repo sync -c --no-clone-bundle --no-tags -j$(nproc --all)
 
+      # 后续步骤保持不变...
       - name: 应用补丁
         run: |
           cd ~/android/redmi
-          # 创建补丁脚本（如果需要）
-          if [ -f "$GITHUB_WORKSPACE/scripts/apply-patches.sh" ]; then
-            $GITHUB_WORKSPACE/scripts/apply-patches.sh
-          else
-            echo "警告: 未找到补丁脚本，跳过补丁步骤"
-          fi
+          [ -f "$GITHUB_WORKSPACE/scripts/apply-patches.sh" ] && $GITHUB_WORKSPACE/scripts/apply-patches.sh || echo "跳过补丁"
 
       - name: 编译组件
         run: |
           cd ~/android/redmi
-          export USE_CCACHE=1
-          export CCACHE_EXEC=$(which ccache)
-          ccache -M 50G
-          # 确保编译脚本存在
-          if [ -f "$GITHUB_WORKSPACE/scripts/build.sh" ]; then
-            $GITHUB_WORKSPACE/scripts/build.sh ${{ github.event.inputs.device }} ${{ github.event.inputs.build_type }}
-          else
-            echo "错误: 找不到编译脚本build.sh"
-            exit 1
-          fi
+          export USE_CCACHE=1 && ccache -M 50G
+          $GITHUB_WORKSPACE/scripts/build.sh ${{ github.event.inputs.device }} ${{ github.event.inputs.build_type }}
 
-      - name: 收集编译产物
+      - name: 收集并上传产物
         run: |
           mkdir -p $GITHUB_WORKSPACE/out
-          cp ~/android/redmi/out/target/product/${{ github.event.inputs.device }}/vendor.img $GITHUB_WORKSPACE/out/ || echo "vendor.img未找到"
-          cp ~/android/redmi/out/target/product/${{ github.event.inputs.device }}/vendor_dlkm.img $GITHUB_WORKSPACE/out/ || echo "vendor_dlkm.img未找到"
-          cp ~/android/redmi/out/target/product/${{ github.event.inputs.device }}/dtb.img $GITHUB_WORKSPACE/out/ || echo "dtb.img未找到"
-          cp ~/android/redmi/out/target/product/${{ github.event.inputs.device }}/dtbo.img $GITHUB_WORKSPACE/out/ || echo "dtbo.img未找到"
-          ls -lh $GITHUB_WORKSPACE/out/
-
-      - name: 上传编译产物
+          cp ~/android/redmi/out/target/product/${{ github.event.inputs.device }}/*.img $GITHUB_WORKSPACE/out/ || echo "部分镜像未找到"
         uses: actions/upload-artifact@v4
         with:
-          name: redmi-sm8450-artifacts-${{ github.event.inputs.device }}
-          path: $GITHUB_WORKSPACE/out/
+          name: redmi-artifacts-${{ github.event.inputs.device }}
+          path: out/
           retention-days: 7
