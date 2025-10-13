@@ -61,9 +61,20 @@ jobs:
           cp $GITHUB_WORKSPACE/local_manifests/redmi-sm8450.xml .repo/local_manifests/
           cp $GITHUB_WORKSPACE/local_manifests/exclude.xml .repo/local_manifests/  # 添加屏蔽规则
 
-          # 验证屏蔽规则是否生效
-          echo -e "\n=== 验证屏蔽的仓库 ==="
-          repo list | grep -E 'prebuilts|system' || echo "屏蔽成功"
+          # 关键：验证屏蔽规则中的项目是否存在
+          echo -e "\n=== 验证屏蔽规则 ==="
+          while read -r line; do
+          # 提取项目名称（排除注释和空行）
+          project=$(echo "$line" | grep -oP 'name="\K[^"]+' | grep -v '^$')
+          if [ -n "$project" ]; then
+          # 检查项目是否存在于主manifest
+          if ! repo list | grep -q "$project"; then
+          echo "⚠️ 移除不存在的项目: $project"
+          # 从exclude.xml中删除无效条目
+          sed -i "/name=\"$project\"/d" .repo/local_manifests/exclude.xml
+           fi
+          fi
+          done < $GITHUB_WORKSPACE/local_manifests/exclude.xml
 
           # 同步源码（最低并行度）
           echo -e "\n=== 同步核心仓库 ==="
