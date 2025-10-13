@@ -6,13 +6,12 @@
     <!-- 红米SM8450内核 -->
     <project name="LineageOS/android_kernel_xiaomi_sm8450" path="kernel/xiaomi/sm8450" remote="github" revision="lineage-20" />
     
-    <!-- 小米SM8450厂商库 -->
+    <!-- 红米SM8450厂商库 -->
     <project name="LineageOS/android_vendor_xiaomi_rubens" path="vendor/xiaomi/rubens" remote="github" revision="lineage-20" />
+    
+    <!-- 通用SM8450厂商库 -->
     <project name="LineageOS/android_vendor_xiaomi_sm8450-common" path="vendor/xiaomi/sm8450-common" remote="github" revision="lineage-20" />
     
-    <!-- 必要的硬件抽象层 -->
-    <project name="LineageOS/android_hardware_xiaomi" path="hardware/xiaomi" remote="github" revision="lineage-20" />
-    
-    <!-- 显示相关库 - 解决显示异常问题 -->
-    <project name="LineageOS/android_hardware_qcom_display" path="hardware/qcom-caf/sm8450/display" remote="github" revision="lineage-20" />
+    <!-- 高通SM8450通用设备树 -->
+    <project name="LineageOS/android_device_qcom_sm8450-common" path="device/qcom/sm8450-common" remote="github" revision="lineage-20" />
 </manifest>
