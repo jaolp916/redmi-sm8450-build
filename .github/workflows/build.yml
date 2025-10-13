@@ -34,11 +34,9 @@ jobs:
           sudo apt install -y git git-lfs curl repo bc bison build-essential ccache flex g++-multilib gcc-multilib lib32ncurses5-dev lib32readline-dev lib32z1-dev libelf-dev liblz4-tool libncurses5-dev zlib1g-dev openjdk-17-jdk-headless
           sudo apt remove -y repo
           curl https://storage.googleapis.com/git-repo-downloads/repo > ~/repo && chmod a+x ~/repo && sudo mv ~/repo /usr/local/bin/
-          repo --version
 
-      - name: 同步精简源码（简化验证）
+      - name: 同步源码（使用正确的XML）
         run: |
-          # 创建目录
           sudo mkdir -p /mnt/android/redmi
           sudo chown -R $USER:$USER /mnt/android
           cd /mnt/android/redmi
@@ -46,34 +44,13 @@ jobs:
           # 初始化Repo
           repo init -u https://github.com/LineageOS/android.git -b lineage-20.0 --depth=1 --no-clone-bundle
 
-          # 复制manifest文件
+          # 复制格式正确的manifest文件
           mkdir -p .repo/local_manifests
           cp $GITHUB_WORKSPACE/local_manifests/redmi-sm8450.xml .repo/local_manifests/
           cp $GITHUB_WORKSPACE/local_manifests/exclude.xml .repo/local_manifests/
 
-          # 简化验证：只检查并提示不存在的项目，不修改文件
-          echo -e "\n=== 检查屏蔽规则 ==="
-          # 先获取所有项目列表
-          repo list > all_projects.txt
-          # 逐行检查exclude.xml中的项目
-          while IFS= read -r line; do
-            # 提取项目名称（跳过注释和空行）
-            if [[ $line =~ name=\"(.*?)\" ]] && ! [[ $line =~ ^[[:space:]]*<!-- ]]; then
-              project="${BASH_REMATCH[1]}"
-              # 检查项目是否存在
-              if ! grep -q "$project" all_projects.txt; then
-                echo "⚠️ 忽略不存在的项目: $project"
-              else
-                echo "✅ 有效屏蔽项目: $project"
-              fi
-            fi
-          done < $GITHUB_WORKSPACE/local_manifests/exclude.xml
-
-          # 同步源码（忽略不存在项目的错误）
-          echo -e "\n=== 同步核心仓库 ==="
-          repo sync -c -j1 --no-tags --force-sync || echo "部分项目同步失败，继续执行"
-
-          df -h /mnt
+          # 直接同步，不做复杂验证
+          repo sync -c -j1 --no-tags --force-sync
 
       - name: 编译组件
         run: |
@@ -95,4 +72,3 @@ jobs:
           name: redmi-artifacts-${{ github.event.inputs.device }}
           path: out/
           retention-days: 7
-    
