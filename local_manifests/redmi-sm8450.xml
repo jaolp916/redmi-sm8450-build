@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <manifest>
-    <!-- 设备树（必需） -->
+    <!-- 红米SM8450设备树（仅设备专属） -->
     <project 
         name="LineageOS/android_device_xiaomi_rubens" 
         path="device/xiaomi/rubens" 
@@ -8,7 +8,7 @@
         revision="lineage-20" 
     />
 
-    <!-- 内核（编译dtb/dtbo必需） -->
+    <!-- SM8450内核（仅设备专属） -->
     <project 
         name="LineageOS/android_kernel_xiaomi_sm8450" 
         path="kernel/xiaomi/sm8450" 
@@ -16,7 +16,7 @@
         revision="lineage-20" 
     />
 
-    <!-- 厂商库（编译vendor必需） -->
+    <!-- 设备厂商库（仅设备专属） -->
     <project 
         name="LineageOS/android_vendor_xiaomi_rubens" 
         path="vendor/xiaomi/rubens" 
@@ -30,25 +30,11 @@
         revision="lineage-20" 
     />
 
-    <!-- 高通通用依赖（必需） -->
+    <!-- 高通SM8450通用依赖（设备相关，非通用工具链） -->
     <project 
         name="LineageOS/android_device_qcom_sm8450-common" 
         path="device/qcom/sm8450-common" 
         remote="github" 
         revision="lineage-20" 
-    />
-
-    <!-- 仅保留最核心的编译工具链（避免被exclude屏蔽） -->
-    <project 
-        name="platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9" 
-        path="prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9" 
-        remote="aosp" 
-        revision="master" 
-    />
-    <project 
-        name="platform/prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9" 
-        path="prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9" 
-        remote="aosp" 
-        revision="master" 
     />
 </manifest>
