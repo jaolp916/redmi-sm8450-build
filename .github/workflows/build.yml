@@ -55,7 +55,6 @@ jobs:
 
           repo sync -c --no-clone-bundle --no-tags -j$(nproc --all)
 
-      # 后续步骤保持不变...
       - name: 应用补丁
         run: |
           cd ~/android/redmi
@@ -67,10 +66,12 @@ jobs:
           export USE_CCACHE=1 && ccache -M 50G
           $GITHUB_WORKSPACE/scripts/build.sh ${{ github.event.inputs.device }} ${{ github.event.inputs.build_type }}
 
-      - name: 收集并上传产物
+      - name: 收集编译产物
         run: |
           mkdir -p $GITHUB_WORKSPACE/out
           cp ~/android/redmi/out/target/product/${{ github.event.inputs.device }}/*.img $GITHUB_WORKSPACE/out/ || echo "部分镜像未找到"
+
+      - name: 上传编译产物
         uses: actions/upload-artifact@v4
         with:
           name: redmi-artifacts-${{ github.event.inputs.device }}
