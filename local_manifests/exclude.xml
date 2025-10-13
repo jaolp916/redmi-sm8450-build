@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <manifest>
-    <!-- 仅屏蔽确认存在的 prebuilts 仓库（根据同步报错保留） -->
+    <!-- 屏蔽大型 prebuilts 仓库（仅保留编译必需的工具链） -->
     <remove-project name="platform/prebuilts/module_sdk/conscrypt" />
     <remove-project name="platform/prebuilts/ndk" />
     <remove-project name="platform/prebuilts/qemu-kernel" />
@@ -17,7 +17,7 @@
     <remove-project name="platform/prebuilts/vndk/v31" />
     <remove-project name="platform/prebuilts/vndk/v32" />
 
-    <!-- 仅屏蔽确认存在的 system 组件 -->
+    <!-- 屏蔽无关 system 组件 -->
     <remove-project name="platform/sdk" />
     <remove-project name="LineageOS/android_system_apex" />
     <remove-project name="platform/system/bpf" />
@@ -28,3 +28,4 @@
     <remove-project name="LineageOS/android_system_core" />
     <remove-project name="platform/system/dmesgd" />
     <remove-project name="LineageOS/android_system_extras" />
+</manifest> <!-- 确保根标签正确闭合 -->
