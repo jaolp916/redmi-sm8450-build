@@ -15,17 +15,34 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     steps:
-      - name: 强制拉取最新代码（包括所有分支和文件）
+      - name: 强制拉取最新代码
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # 拉取所有历史，确保最新文件被包含
+          fetch-depth: 0
 
-      - name: 终极调试 - 显示所有文件路径
+      - name: 清理磁盘空间（关键步骤）
         run: |
-          echo "当前工作目录：$(pwd)"
-          echo "列出仓库中所有包含'redmi-sm8450.xml'的文件："
-          find . -name "redmi-sm8450.xml"  # 搜索整个仓库找这个文件
-          echo "列出local_manifests目录的详细信息："
+          # 查看初始磁盘使用情况
+          df -h
+
+          # 删除不必要的预装软件和文件
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/share/boost
+          sudo rm -rf /var/cache/apt/archives/*
+          sudo apt clean
+          sudo apt autoremove -y
+
+          # 移动Android源码到更大的临时分区（/mnt空间更大）
+          sudo mkdir -p /mnt/android
+          sudo chown -R $USER:$USER /mnt/android
+
+          # 再次查看清理后的磁盘使用情况
+          df -h
+
+      - name: 终极调试 - 显示文件路径
+        run: |
+          find . -name "redmi-sm8450.xml"
           ls -la ./local_manifests/ || echo "local_manifests目录不存在"
 
       - name: 安装依赖
@@ -35,41 +52,46 @@ jobs:
           sudo apt remove -y repo
           curl https://storage.googleapis.com/git-repo-downloads/repo > ~/repo && chmod a+x ~/repo && sudo mv ~/repo /usr/local/bin/
 
-      - name: 同步源码（使用绝对路径复制）
+      - name: 同步源码（使用更大的临时分区）
         run: |
-          mkdir -p ~/android/redmi && cd ~/android/redmi
+          # 使用/mnt分区存储源码（空间更大）
+          mkdir -p /mnt/android/redmi && cd /mnt/android/redmi
           repo init -u https://github.com/LineageOS/android.git -b lineage-20.0 --depth=1
           mkdir -p .repo/local_manifests
 
-          # 用find命令强制查找文件并复制（无视路径深度）
+          # 复制清单文件
           MANIFEST_PATH=$(find $GITHUB_WORKSPACE -name "redmi-sm8450.xml" | head -n 1)
           if [ -z "$MANIFEST_PATH" ]; then
-            echo "❌ 彻底找不到redmi-sm8450.xml，请检查文件是否存在于仓库中"
+            echo "❌ 找不到redmi-sm8450.xml"
             exit 1
           else
-            echo "找到文件：$MANIFEST_PATH，开始复制..."
             cp "$MANIFEST_PATH" .repo/local_manifests/
-            echo "复制后验证："
-            ls -la .repo/local_manifests/redmi-sm8450.xml
           fi
 
-          repo sync -c --no-clone-bundle --no-tags -j$(nproc --all)
+          # 同步源码（限制并行数减少内存占用）
+          repo sync -c --no-clone-bundle --no-tags -j4
 
       - name: 应用补丁
         run: |
-          cd ~/android/redmi
+          cd /mnt/android/redmi
           [ -f "$GITHUB_WORKSPACE/scripts/apply-patches.sh" ] && $GITHUB_WORKSPACE/scripts/apply-patches.sh || echo "跳过补丁"
 
-      - name: 编译组件
+      - name: 编译组件（优化空间使用）
         run: |
-          cd ~/android/redmi
-          export USE_CCACHE=1 && ccache -M 50G
+          cd /mnt/android/redmi
+          # 限制ccache大小，避免占用过多空间
+          export USE_CCACHE=1
+          export CCACHE_EXEC=$(which ccache)
+          ccache -M 20G  # 减小缓存大小，默认50G可能太大
+
+          # 开始编译（减少并行数，避免IO压力过大）
           $GITHUB_WORKSPACE/scripts/build.sh ${{ github.event.inputs.device }} ${{ github.event.inputs.build_type }}
 
       - name: 收集编译产物
         run: |
           mkdir -p $GITHUB_WORKSPACE/out
-          cp ~/android/redmi/out/target/product/${{ github.event.inputs.device }}/*.img $GITHUB_WORKSPACE/out/ || echo "部分镜像未找到"
+          cp /mnt/android/redmi/out/target/product/${{ github.event.inputs.device }}/*.img $GITHUB_WORKSPACE/out/ || echo "部分镜像未找到"
+          df -h  # 查看最终磁盘使用情况
 
       - name: 上传编译产物
         uses: actions/upload-artifact@v4
