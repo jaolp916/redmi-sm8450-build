@@ -43,35 +43,39 @@ jobs:
           echo -e "\n=== Disk Usage After Cleanup ==="
           df -h /mnt
 
-      - name: Install minimal dependencies
+      - name: Install minimal dependencies and latest repo
         run: |
           sudo apt update
           sudo apt install -y \
-            git git-lfs curl repo \
+            git git-lfs curl \
             bc bison build-essential ccache flex \
             g++-multilib gcc-multilib \
             lib32ncurses5-dev lib32readline-dev lib32z1-dev \
             libelf-dev liblz4-tool libncurses5-dev zlib1g-dev \
             openjdk-17-jdk-headless
 
+          # 关键修复：安装最新版本的repo工具
           sudo apt remove -y repo
+          # 从官方源获取最新repo（确保支持现代参数）
           curl https://storage.googleapis.com/git-repo-downloads/repo > ~/repo
           chmod a+x ~/repo
           sudo mv ~/repo /usr/local/bin/
+          # 验证repo版本
+          echo "Repo版本信息："
+          repo --version
 
       - name: Sync minimal source code
         run: |
-          # 关键修复：使用sudo创建目录并设置权限
+          # 创建目录并设置权限
           sudo mkdir -p /mnt/android/redmi
-          sudo chown -R $USER:$USER /mnt/android  # 赋予当前用户完全权限
+          sudo chown -R $USER:$USER /mnt/android
           cd /mnt/android/redmi
 
-          # 初始化Repo
+          # 关键修复：移除不兼容的--filter参数（旧版repo不支持）
           repo init \
             -u https://github.com/LineageOS/android.git \
             -b lineage-20.0 \
             --depth=1 \
-            --filter=blob:none \
             --no-clone-bundle
 
           # 复制manifest文件
@@ -82,7 +86,7 @@ jobs:
           fi
           mkdir -p .repo/local_manifests && cp "$MANIFEST_PATH" .repo/local_manifests/
 
-          # 同步源码
+          # 同步源码（降低并行度减少空间占用）
           echo -e "\n=== Syncing Core Repos ==="
           repo sync -c -j2 --no-tags --force-sync
 
