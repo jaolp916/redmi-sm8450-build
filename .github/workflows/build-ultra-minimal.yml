@@ -1,4 +1,4 @@
-name: 零系统源码编译（仅内核+设备树+厂商库）
+name: 安全极简编译（解决清理失败问题）
 on:
   workflow_dispatch:
     inputs:
@@ -10,102 +10,104 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     steps:
-      - name: 破坏性清理（释放70GB+空间）
+      - name: 安全清理磁盘（释放50GB+空间，不破坏系统）
         run: |
-          # 删除系统级非必要文件（几乎清空除基础工具外的所有内容）
-          sudo rm -rf /usr/share/* /opt/* /var/lib/* /lib/*/docker /snap/* /home/runner/*
-          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
-          # 保留编译必需的基础工具
-          sudo apt update && sudo apt install -y --reinstall coreutils
-          # 查看剩余空间（确保/mnt有>50GB可用）
+          set -euo pipefail
+          
+          # 1. 安全删除大型已知目录（不影响系统核心）
+          SAFE_DELETE=(
+            "/var/lib/docker"           # Docker镜像（10-20GB）
+            "/usr/local/lib/android"    # Android SDK残留（5+GB）
+            "/usr/share/dotnet"         # .NET框架（5+GB）
+            "/opt/ghc"                  # Haskell编译器（3+GB）
+            "/usr/local/share/boost"    # Boost库（2+GB）
+            "/var/cache/apt/archives"   # APT缓存（2+GB）
+            "/var/lib/apt/lists"        # APT列表（1+GB）
+            "/var/log"                  # 系统日志（1+GB）
+            "/tmp/*"                    # 临时文件
+            "$HOME/.cache"              # 用户缓存
+            "$HOME/.local"              # 用户本地文件
+          )
+          
+          for dir in "${SAFE_DELETE[@]}"; do
+            if [ -e "$dir" ]; then
+              echo "删除: $dir"
+              sudo rm -rf "$dir" || echo "警告：$dir 删除失败，跳过"
+            fi
+          done
+          
+          # 2. 清理APT冗余包
+          sudo apt clean
+          sudo apt autoremove -y --purge
+          
+          # 3. 验证剩余空间（确保/mnt有>50GB）
+          echo -e "\n=== 清理后磁盘空间 ==="
           df -h /mnt
 
       - name: 安装最小编译工具链
         run: |
+          sudo apt update
           sudo apt install -y \
             git gcc-aarch64-linux-gnu make bc bison flex libssl-dev dtc \
-            cpio openssl liblz4-tool zstd  # 新增打包工具（用于制作vendor镜像）
+            cpio openssl liblz4-tool zstd
 
-      - name: 拉取内核源码（单独拉取，无依赖）
+      # 后续步骤与之前相同（拉取源码、应用补丁、编译）
+      - name: 拉取内核源码
         run: |
           mkdir -p /mnt/build/kernel
           cd /mnt/build/kernel
           git clone --depth=1 https://github.com/LineageOS/android_kernel_xiaomi_sm8450.git -b lineage-20 .
-          # 查看大小（通常<3GB）
-          du -sh .
 
       - name: 拉取设备树和厂商库
         run: |
-          # 设备树
           mkdir -p /mnt/build/device/rubens
           cd /mnt/build/device/rubens
           git clone --depth=1 https://github.com/LineageOS/android_device_xiaomi_rubens.git -b lineage-20 .
 
-          # 厂商库（vendor）
           mkdir -p /mnt/build/vendor/rubens
           cd /mnt/build/vendor/rubens
           git clone --depth=1 https://github.com/LineageOS/android_vendor_xiaomi_rubens.git -b lineage-20 .
 
-          # 通用厂商库
           mkdir -p /mnt/build/vendor/sm8450-common
           cd /mnt/build/vendor/sm8450-common
           git clone --depth=1 https://github.com/LineageOS/android_vendor_xiaomi_sm8450-common.git -b lineage-20 .
 
-          # 查看总大小（通常<5GB）
-          du -sh /mnt/build/device /mnt/build/vendor
-
-      - name: 应用硬件修复补丁（核心步骤）
+      - name: 应用硬件修复补丁
         run: |
-          # 赋予脚本执行权限
           chmod +x $GITHUB_WORKSPACE/scripts/apply-all-patches.sh
-          # 应用电池/显示/分区补丁（仅修改内核和设备树）
           $GITHUB_WORKSPACE/scripts/apply-all-patches.sh
 
-      - name: 编译内核和dtb/dtbo（解锁电池+分区）
+      - name: 编译内核和dtb/dtbo
         run: |
           cd /mnt/build/kernel
-          # 加载设备配置
           make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- vendor/rubens_defconfig
-          # 编译内核和设备树（低并行度减少临时文件）
           make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- -j2 dtbs dtbo.img
-          # 复制产物
           mkdir -p /mnt/build/out
           cp arch/arm64/boot/dtb /mnt/build/out/dtb.img
           cp arch/arm64/boot/dtbo.img /mnt/build/out/
 
-      - name: 手动打包vendor镜像（解决文件加载异常）
+      - name: 手动打包vendor镜像
         run: |
-          # 创建vendor镜像目录结构
           mkdir -p /mnt/build/vendor_img/{vendor,system}
-          # 复制厂商库文件
           cp -r /mnt/build/vendor/rubens/* /mnt/build/vendor_img/vendor/
           cp -r /mnt/build/vendor/sm8450-common/* /mnt/build/vendor_img/vendor/
-          # 生成ext4镜像（大小根据实际文件调整）
           VENDOR_SIZE=$(du -sh /mnt/build/vendor_img | awk '{print $1}' | sed 's/G//')
-          VENDOR_SIZE=$(( ${VENDOR_SIZE%.*} + 2 ))  # 预留2GB空间
+          VENDOR_SIZE=$(( ${VENDOR_SIZE%.*} + 2 ))
           dd if=/dev/zero of=/mnt/build/out/vendor.img bs=1G count=$VENDOR_SIZE
           mkfs.ext4 -F /mnt/build/out/vendor.img
-          # 挂载并写入文件
           sudo mount /mnt/build/out/vendor.img /mnt/build/vendor_img/system
           sudo cp -r /mnt/build/vendor_img/vendor/* /mnt/build/vendor_img/system/
           sudo umount /mnt/build/vendor_img/system
 
-      - name: 编译vendor_dlkm（解决显示异常）
+      - name: 编译vendor_dlkm
         run: |
-          # 简化版：从设备树提取驱动模块并打包
           mkdir -p /mnt/build/out/vendor_dlkm
           cp -r /mnt/build/device/rubens/dlkm/* /mnt/build/out/vendor_dlkm/
-          # 打包为镜像
           find /mnt/build/out/vendor_dlkm -print0 | cpio -0 -H newc -o | gzip > /mnt/build/out/vendor_dlkm.img
 
-      - name: 查看最终产物
-        run: |
-          ls -lh /mnt/build/out/
-          df -h /mnt  # 确认空间使用情况
-
-      - name: 上传修复后的镜像
+      - name: 上传产物
         uses: actions/upload-artifact@v4
         with:
-          name: ultra-minimal-artifacts-${{ github.event.inputs.device }}
+          name: safe-artifacts-${{ github.event.inputs.device }}
           path: /mnt/build/out/
           retention-days: 14
