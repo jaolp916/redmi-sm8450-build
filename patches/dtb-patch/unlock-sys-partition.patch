@@ -1,0 +1,22 @@
+# 针对分区挂载配置（解除sys分区只读限制）
+diff --git a/arch/arm64/boot/dts/qcom/sm8450-partitions.dtsi b/arch/arm64/boot/dts/qcom/sm8450-partitions.dtsi
+index 7a3f2d1..e6c2b90 100644
+--- a/arch/arm64/boot/dts/qcom/sm8450-partitions.dtsi
++++ b/arch/arm64/boot/dts/qcom/sm8450-partitions.dtsi
+@@ -45,7 +45,7 @@
+                label = "sys";
+                reg = <0x10000000 0x80000000>;  // 分区起始地址和大小（保持不变）
+                read-only;  // 原厂只读限制
+-               type = "ext4";
++               type = "ext4";
++               // 移除read-only属性，添加可写权限
++               // read-only;  // 注释掉只读限制
+        };
+
+        // 同时解锁vendor分区（解决文件加载异常的底层权限问题）
+        vendor {
+                label = "vendor";
+                reg = <0x90000000 0x40000000>;
+-               read-only;
++               // read-only;  // 允许写入vendor分区，便于修改驱动文件
+        };
