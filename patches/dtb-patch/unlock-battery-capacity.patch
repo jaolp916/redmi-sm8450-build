@@ -1,17 +1,15 @@
-# 针对红米SM8450设备的电池配置文件（需根据实际路径调整）
-diff --git a/arch/arm64/boot/dts/qcom/sm8450-redmi-rubens.dts b/arch/arm64/boot/dts/qcom/sm8450-redmi-rubens.dts
-index 2d7f1a3..c8b9d0e 100644
---- a/arch/arm64/boot/dts/qcom/sm8450-redmi-rubens.dts
-+++ b/arch/arm64/boot/dts/qcom/sm8450-redmi-rubens.dts
-@@ -1230,8 +1230,8 @@
-        battery {
-                compatible = "qcom,battery";
-                battery-type = "lipolymer";
--               capacity = <5000>;  // 原厂限制容量（mAh）
--               voltage-max-design = <4350000>;  // 原厂限制最大电压
-+               capacity = <5500>;  // 新电芯实际容量（根据你的电芯修改）
-+               voltage-max-design = <4400000>;  // 新电芯最大电压（参考电芯规格）
-                voltage-min-design = <3000000>;
-                precharge-current = <256000>;
-                charge-term-current = <100000>;  // 降低终止电流，允许满充
-        };
+diff --git a/arch/arm64/boot/dts/qcom/sm8450-diting-pmic.dtsi b/arch/arm64/boot/dts/qcom/sm8450-diting-pmic.dtsi
+index 7c2d1e8..a9f3b5c 100644
+--- a/arch/arm64/boot/dts/qcom/sm8450-diting-pmic.dtsi
++++ b/arch/arm64/boot/dts/qcom/sm8450-diting-pmic.dtsi
+@@ -45,8 +45,8 @@
+        compatible = "qcom,pm8350b-bms";
+        reg = <0x0008 0x0010>;
+        interrupts = <0x0 0x08 0x0 IRQ_TYPE_EDGE_RISING>;
+-       qcom,batt-id-resistor = <10000>;  /* 原始配置：限制充电上限 */
+-       qcom,charge-full-capacity = <4900>;  /* 原始容量：4900mAh（限制值） */
++       qcom,batt-id-resistor = <5000>;   /* 解锁限制：调整识别电阻值 */
++       qcom,charge-full-capacity = <5000>;  /* 解锁至设计容量：5000mAh */
+        qcom,charge-term-current = <500>;
+        qcom,pre-charge-current = <256000>;
+        qcom,fast-charge-current = <3000000>;  /* 支持3A快充 */
