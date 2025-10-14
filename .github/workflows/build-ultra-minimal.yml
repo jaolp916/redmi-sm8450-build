@@ -1,4 +1,4 @@
-name: 安全极简编译（修复/mnt目录权限）
+name: 安全极简编译（修复分支不存在错误）
 on:
   workflow_dispatch:
     inputs:
@@ -46,39 +46,39 @@ jobs:
             git gcc-aarch64-linux-gnu make bc bison flex libssl-dev \
             device-tree-compiler cpio openssl liblz4-tool zstd
 
-      # 新增步骤：创建/mnt/build目录并授权（解决权限问题）
       - name: 初始化编译目录（授权权限）
         run: |
-          # 用sudo创建/mnt/build目录（需要root权限）
           sudo mkdir -p /mnt/build
-          # 将目录所有权赋予当前用户（避免后续操作权限不足）
           sudo chown -R $USER:$USER /mnt/build
-          # 验证权限
-          ls -ld /mnt/build  # 应显示当前用户为所有者
+          ls -ld /mnt/build
 
-      - name: 拉取内核源码
+      - name: 拉取内核源码（使用实际存在的分支）
         run: |
-          # 现在有权限创建子目录了
           mkdir -p /mnt/build/kernel
           cd /mnt/build/kernel
-          git clone --depth=1 https://github.com/LineageOS/android_kernel_xiaomi_sm8450.git -b lineage-20 .
+          # 若lineage-20不存在，尝试lineage-21或删除-b参数使用默认分支
+          git clone --depth=1 https://github.com/LineageOS/android_kernel_xiaomi_sm8450.git -b lineage-21 . || \
+          git clone --depth=1 https://github.com/LineageOS/android_kernel_xiaomi_sm8450.git .
 
-      - name: 拉取设备树与厂商库
+      - name: 拉取设备树与厂商库（使用实际存在的分支）
         run: |
-          # 设备树
+          # 设备树（调整分支）
           mkdir -p /mnt/build/device/rubens
           cd /mnt/build/device/rubens
-          git clone --depth=1 https://github.com/LineageOS/android_device_xiaomi_rubens.git -b lineage-20 .
+          git clone --depth=1 https://github.com/LineageOS/android_device_xiaomi_rubens.git -b lineage-21 . || \
+          git clone --depth=1 https://github.com/LineageOS/android_device_xiaomi_rubens.git .
           
-          # 设备专属厂商库
+          # 设备专属厂商库（调整分支）
           mkdir -p /mnt/build/vendor/rubens
           cd /mnt/build/vendor/rubens
-          git clone --depth=1 https://github.com/LineageOS/android_vendor_xiaomi_rubens.git -b lineage-20 .
+          git clone --depth=1 https://github.com/LineageOS/android_vendor_xiaomi_rubens.git -b lineage-21 . || \
+          git clone --depth=1 https://github.com/LineageOS/android_vendor_xiaomi_rubens.git .
           
-          # 通用厂商库
+          # 通用厂商库（调整分支）
           mkdir -p /mnt/build/vendor/sm8450-common
           cd /mnt/build/vendor/sm8450-common
-          git clone --depth=1 https://github.com/LineageOS/android_vendor_xiaomi_sm8450-common.git -b lineage-20 .
+          git clone --depth=1 https://github.com/LineageOS/android_vendor_xiaomi_sm8450-common.git -b lineage-21 . || \
+          git clone --depth=1 https://github.com/LineageOS/android_vendor_xiaomi_sm8450-common.git .
 
       - name: 应用补丁（解锁电池/显示/分区）
         run: |
