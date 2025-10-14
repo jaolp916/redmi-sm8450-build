@@ -1,12 +1,22 @@
-diff --git a/arch/arm64/boot/dts/qcom/sm8450-diting.dtsi b/arch/arm64/boot/dts/qcom/sm8450-diting.dtsi
-index 5f7b3d2..9a1c7e4 100644
---- a/arch/arm64/boot/dts/qcom/sm8450-diting.dtsi
-+++ b/arch/arm64/boot/dts/qcom/sm8450-diting.dtsi
-@@ -856,6 +856,7 @@
+diff --git a/dts/sm8450-common.dtsi b/dts/sm8450-common.dtsi
+index 2d1e3f4..8c7b6a5 100644
+--- a/dts/sm8450-common.dtsi
++++ b/dts/sm8450-common.dtsi
+@@ -692,7 +692,7 @@
+        panel-timing {
+                clock-frequency = <270000000>;
+                hactive = <2560>;  /* 匹配diting的2K分辨率 */
+                vactive = <1440>;
+-               refresh-rate = <60>;
++               refresh-rate = <120>;  /* 解锁120Hz刷新率 */
+                hfront-porch = <80>;
+                hback-porch = <80>;
+                vfront-porch = <20>;
+@@ -720,6 +720,7 @@
         qcom,mdss-dsi-bl-pmic-control;
         qcom,mdss-dsi-bl-min-level = <1>;
         qcom,mdss-dsi-bl-max-level = <255>;
-+       qcom,mdss-dsi-bl-pwm-frequency = <24000>; 
++       qcom,mdss-dsi-bl-pwm-frequency = <24000>;  /* 解决高刷新率闪烁 */
         qcom,mdss-dsi-phy-mode = "dsi_phy_2_4g";
         qcom,mdss-dsi-bus-width = <4>;
-        qcom,mdss-dsi-panel-type = "dsc";
+ };
