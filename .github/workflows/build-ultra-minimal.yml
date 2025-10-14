@@ -1,4 +1,4 @@
-name: 安全极简编译（修复APT日志错误）
+name: 安全极简编译（修复dtc包名错误）
 on:
   workflow_dispatch:
     inputs:
@@ -10,29 +10,20 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     steps:
-      # 步骤1：安全清理（保留APT日志目录，解决报错）
       - name: 安全清理磁盘空间
         run: |
           set -euo pipefail
           
-          # 1. 备份APT日志目录（避免apt报错）
+          # 备份APT日志目录
           if [ -d "/var/log/apt" ]; then
             sudo mv /var/log/apt /tmp/apt-log-backup
           fi
           
-          # 2. 删除大型无用目录（不破坏系统核心）
-          sudo rm -rf /var/lib/docker
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /usr/local/share/boost
-          sudo rm -rf /var/cache/apt/archives/*
-          sudo rm -rf /var/lib/apt/lists/*
-          sudo rm -rf /var/log/*
-          sudo rm -rf /tmp/*
-          sudo rm -rf ~/.cache ~/.local
+          # 删除大型无用目录
+          sudo rm -rf /var/lib/docker /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/share/boost
+          sudo rm -rf /var/cache/apt/archives/* /var/lib/apt/lists/* /var/log/* /tmp/* ~/.cache ~/.local
           
-          # 3. 恢复/新建APT日志目录
+          # 恢复/新建APT日志目录
           if [ -d "/tmp/apt-log-backup" ]; then
             sudo mv /tmp/apt-log-backup /var/log/apt
           else
@@ -41,29 +32,27 @@ jobs:
           sudo chown -R root:root /var/log/apt
           sudo chmod 0755 /var/log/apt
           
-          # 4. 清理APT冗余
+          # 清理APT冗余
           sudo apt clean
           sudo apt autoremove -y --purge || echo "部分包删除失败，继续执行"
           
-          # 5. 查看空间
+          # 查看空间
           df -h /mnt
 
-      # 步骤2：安装编译工具链
-      - name: 安装最小编译依赖
+      - name: 安装最小编译依赖（修正dtc包名）
         run: |
           sudo apt update
+          # 关键修复：将dtc替换为正确的包名device-tree-compiler
           sudo apt install -y \
-            git gcc-aarch64-linux-gnu make bc bison flex libssl-dev dtc \
-            cpio openssl liblz4-tool zstd
+            git gcc-aarch64-linux-gnu make bc bison flex libssl-dev \
+            device-tree-compiler cpio openssl liblz4-tool zstd
 
-      # 步骤3：拉取内核源码
       - name: 拉取内核源码
         run: |
           mkdir -p /mnt/build/kernel
           cd /mnt/build/kernel
           git clone --depth=1 https://github.com/LineageOS/android_kernel_xiaomi_sm8450.git -b lineage-20 .
 
-      # 步骤4：拉取设备树和厂商库
       - name: 拉取设备树与厂商库
         run: |
           # 设备树
@@ -81,56 +70,43 @@ jobs:
           cd /mnt/build/vendor/sm8450-common
           git clone --depth=1 https://github.com/LineageOS/android_vendor_xiaomi_sm8450-common.git -b lineage-20 .
 
-      # 步骤5：应用硬件修复补丁
       - name: 应用补丁（解锁电池/显示/分区）
         run: |
           chmod +x $GITHUB_WORKSPACE/scripts/apply-all-patches.sh
           $GITHUB_WORKSPACE/scripts/apply-all-patches.sh
 
-      # 步骤6：编译内核与dtb/dtbo（解锁电池容量）
       - name: 编译内核和设备树
         run: |
           cd /mnt/build/kernel
-          # 加载设备配置
           make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- vendor/rubens_defconfig
-          # 编译（低并行度避免空间不足）
           make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- -j2 dtbs dtbo.img
-          # 保存产物
           mkdir -p /mnt/build/out
           cp arch/arm64/boot/dtb /mnt/build/out/dtb.img
           cp arch/arm64/boot/dtbo.img /mnt/build/out/
 
-      # 步骤7：手动打包vendor镜像（解决文件加载异常）
       - name: 打包vendor.img
         run: |
-          # 创建临时目录
           mkdir -p /mnt/build/vendor_img/{vendor,system}
-          # 复制厂商文件
           cp -r /mnt/build/vendor/rubens/* /mnt/build/vendor_img/vendor/
           cp -r /mnt/build/vendor/sm8450-common/* /mnt/build/vendor_img/vendor/
-          # 计算镜像大小（预留2GB）
           VENDOR_SIZE=$(du -sh /mnt/build/vendor_img | awk '{print $1}' | sed 's/G//')
           VENDOR_SIZE=$(( ${VENDOR_SIZE%.*} + 2 ))
-          # 生成ext4镜像
           dd if=/dev/zero of=/mnt/build/out/vendor.img bs=1G count=$VENDOR_SIZE
           mkfs.ext4 -F /mnt/build/out/vendor.img
-          # 写入文件
           sudo mount /mnt/build/out/vendor.img /mnt/build/vendor_img/system
           sudo cp -r /mnt/build/vendor_img/vendor/* /mnt/build/vendor_img/system/
           sudo umount /mnt/build/vendor_img/system
 
-      # 步骤8：编译vendor_dlkm（解决显示异常）
       - name: 打包vendor_dlkm.img
         run: |
           mkdir -p /mnt/build/out/vendor_dlkm
           cp -r /mnt/build/device/rubens/dlkm/* /mnt/build/out/vendor_dlkm/
-          # 打包为cpio格式
           find /mnt/build/out/vendor_dlkm -print0 | cpio -0 -H newc -o | gzip > /mnt/build/out/vendor_dlkm.img
 
-      # 步骤9：上传最终产物
       - name: 上传编译产物
         uses: actions/upload-artifact@v4
         with:
           name: final-artifacts-${{ github.event.inputs.device }}
           path: /mnt/build/out/
           retention-days: 14
+    
