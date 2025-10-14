@@ -1,4 +1,4 @@
-name: 安全极简编译（修复脚本不存在错误）
+name: 仅搜索已有脚本的编译工作流
 on:
   workflow_dispatch:
     inputs:
@@ -10,129 +10,115 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     steps:
-      - name: 拉取仓库代码（含脚本和补丁）
+      # 步骤1：拉取仓库代码（确保完整拉取）
+      - name: 拉取仓库代码
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1  # 确保拉取所有文件（包括scripts和patches目录）
+          fetch-depth: 1
+          show-progress: true
 
+      # 步骤2：安全清理磁盘空间
       - name: 安全清理磁盘空间
         run: |
           set -euo pipefail
-          
-          # 备份APT日志目录
-          if [ -d "/var/log/apt" ]; then
-            sudo mv /var/log/apt /tmp/apt-log-backup
-          fi
-          
-          # 删除大型无用目录
-          sudo rm -rf /var/lib/docker /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/share/boost
-          sudo rm -rf /var/cache/apt/archives/* /var/lib/apt/lists/* /var/log/* /tmp/* ~/.cache ~/.local
-          
-          # 恢复/新建APT日志目录
-          if [ -d "/tmp/apt-log-backup" ]; then
-            sudo mv /tmp/apt-log-backup /var/log/apt
-          else
-            sudo mkdir -p /var/log/apt
-          fi
-          sudo chown -R root:root /var/log/apt
-          sudo chmod 0755 /var/log/apt
-          
-          # 清理APT冗余
-          sudo apt clean
-          sudo apt autoremove -y --purge || echo "部分包删除失败，继续执行"
-          
-          # 查看空间
+          sudo rm -rf /var/lib/docker /usr/local/lib/android /usr/share/dotnet /opt/ghc
+          sudo rm -rf /var/cache/apt/archives/* /var/lib/apt/lists/* /var/log/* /tmp/* ~/.cache
+          sudo apt clean && sudo apt autoremove -y --purge
           df -h /mnt
 
-      - name: 安装最小编译依赖
+      # 步骤3：安装编译依赖
+      - name: 安装编译依赖
         run: |
           sudo apt update
           sudo apt install -y \
             git gcc-aarch64-linux-gnu make bc bison flex libssl-dev \
             device-tree-compiler cpio openssl liblz4-tool zstd
 
-      - name: 初始化编译目录（授权权限）
+      # 步骤4：初始化编译目录（授权权限）
+      - name: 初始化编译目录
         run: |
           sudo mkdir -p /mnt/build
           sudo chown -R $USER:$USER /mnt/build
           ls -ld /mnt/build
 
-      - name: 配置GitHub SSH访问
+      # 步骤5：配置SSH并拉取源码
+      - name: 配置SSH并拉取源码
         run: |
+          # 配置SSH信任GitHub主机
           mkdir -p ~/.ssh
           ssh-keyscan github.com >> ~/.ssh/known_hosts
-          ssh -T git@github.com || echo "SSH配置完成（非错误）"
-
-      - name: 拉取内核源码（SSH协议+重试）
-        run: |
-          mkdir -p /mnt/build/kernel
-          cd /mnt/build/kernel
-          for i in {1..3}; do
-            if git clone --depth=1 git@github.com:LineageOS/android_kernel_xiaomi_sm8450.git -b lineage-21 .; then
-              break
-            else
-              echo "第$i次克隆失败，重试..."
-              sleep 5
-            fi
-          done
-
-      - name: 拉取设备树与厂商库（SSH协议+重试）
-        run: |
-          # 设备树
-          mkdir -p /mnt/build/device/rubens
-          cd /mnt/build/device/rubens
-          for i in {1..3}; do
-            if git clone --depth=1 git@github.com:LineageOS/android_device_xiaomi_rubens.git -b lineage-21 .; then
-              break
-            else
-              echo "第$i次克隆失败，重试..."
-              sleep 5
-            fi
-          done
           
-          # 设备专属厂商库
-          mkdir -p /mnt/build/vendor/rubens
-          cd /mnt/build/vendor/rubens
-          for i in {1..3}; do
-            if git clone --depth=1 git@github.com:LineageOS/android_vendor_xiaomi_rubens.git -b lineage-21 .; then
-              break
-            else
-              echo "第$i次克隆失败，重试..."
-              sleep 5
-            fi
-          done
+          # 拉取内核源码
+          mkdir -p /mnt/build/kernel && cd /mnt/build/kernel
+          git clone --depth=1 git@github.com:LineageOS/android_kernel_xiaomi_sm8450.git -b lineage-21 . || \
+          git clone --depth=1 git@github.com:LineageOS/android_kernel_xiaomi_sm8450.git .
           
-          # 通用厂商库
-          mkdir -p /mnt/build/vendor/sm8450-common
-          cd /mnt/build/vendor/sm8450-common
-          for i in {1..3}; do
-            if git clone --depth=1 git@github.com:LineageOS/android_vendor_xiaomi_sm8450-common.git -b lineage-21 .; then
-              break
-            else
-              echo "第$i次克隆失败，重试..."
-              sleep 5
-            fi
-          done
+          # 拉取设备树
+          mkdir -p /mnt/build/device/rubens && cd /mnt/build/device/rubens
+          git clone --depth=1 git@github.com:LineageOS/android_device_xiaomi_rubens.git -b lineage-21 . || \
+          git clone --depth=1 git@github.com:LineageOS/android_device_xiaomi_rubens.git .
+          
+          # 拉取设备专属厂商库
+          mkdir -p /mnt/build/vendor/rubens && cd /mnt/build/vendor/rubens
+          git clone --depth=1 git@github.com:LineageOS/android_vendor_xiaomi_rubens.git -b lineage-21 . || \
+          git clone --depth=1 git@github.com:LineageOS/android_vendor_xiaomi_rubens.git .
+          
+          # 拉取通用厂商库
+          mkdir -p /mnt/build/vendor/sm8450-common && cd /mnt/build/vendor/sm8450-common
+          git clone --depth=1 git@github.com:LineageOS/android_vendor_xiaomi_sm8450-common.git -b lineage-21 . || \
+          git clone --depth=1 git@github.com:LineageOS/android_vendor_xiaomi_sm8450-common.git .
 
-      - name: 应用补丁（解锁电池/显示/分区）
+      # 步骤6：全仓库搜索apply-all-patches.sh（核心步骤）
+      - name: 全仓库搜索补丁脚本
+        id: find_script
         run: |
-          # 明确脚本路径（与仓库结构匹配）
-          "https://github.com/jaolp916/redmi-sm8450-build/blob/main/scripts/apply-all-patches.sh"
+          set -euo pipefail
+          echo "=== 搜索apply-all-patches.sh ==="
+          # 递归搜索仓库内所有同名脚本
+          FOUND_SCRIPT=$(find "$GITHUB_WORKSPACE" -name "apply-all-patches.sh" -type f -print -quit)
+          
+          if [ -z "$FOUND_SCRIPT" ]; then
+            echo "❌ 未找到脚本！请确认："
+            echo "1. 脚本已提交到仓库（git add + commit + push）"
+            echo "2. 文件名严格为apply-all-patches.sh（大小写敏感）"
+            exit 1
+          else
+            echo "✅ 找到脚本：$FOUND_SCRIPT"
+            # 添加执行权限
+            [ ! -x "$FOUND_SCRIPT" ] && chmod +x "$FOUND_SCRIPT"
+            # 保存路径到输出变量
+            echo "script_path=$FOUND_SCRIPT" >> "$GITHUB_OUTPUT"
+          fi
 
-      - name: 编译内核和设备树
+      # 步骤7：执行补丁脚本
+      - name: 应用补丁
+        run: |
+          echo "=== 执行补丁脚本 ==="
+          SCRIPT_PATH="${{ steps.find_script.outputs.script_path }}"
+          # 打印执行过程（便于调试）
+          bash -x "$SCRIPT_PATH"
+
+      # 步骤8：编译内核与设备树
+      - name: 编译内核和dtb/dtbo
         run: |
           cd /mnt/build/kernel
+          # 加载设备配置
           make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- vendor/rubens_defconfig
+          # 编译（低并行度避免空间不足）
           make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- -j2 dtbs dtbo.img
+          # 保存产物
           mkdir -p /mnt/build/out
           cp arch/arm64/boot/dtb /mnt/build/out/dtb.img
           cp arch/arm64/boot/dtbo.img /mnt/build/out/
 
-      - name: 打包vendor.img
+      # 步骤9：打包vendor和vendor_dlkm镜像
+      - name: 打包vendor.img和vendor_dlkm.img
         run: |
+          # 打包vendor.img
           mkdir -p /mnt/build/vendor_img/{vendor,system}
           cp -r /mnt/build/vendor/rubens/* /mnt/build/vendor_img/vendor/
           cp -r /mnt/build/vendor/sm8450-common/* /mnt/build/vendor_img/vendor/
+          # 计算镜像大小（预留2GB）
           VENDOR_SIZE=$(du -sh /mnt/build/vendor_img | awk '{print $1}' | sed 's/G//')
           VENDOR_SIZE=$(( ${VENDOR_SIZE%.*} + 2 ))
           dd if=/dev/zero of=/mnt/build/out/vendor.img bs=1G count=$VENDOR_SIZE
@@ -140,17 +126,16 @@ jobs:
           sudo mount /mnt/build/out/vendor.img /mnt/build/vendor_img/system
           sudo cp -r /mnt/build/vendor_img/vendor/* /mnt/build/vendor_img/system/
           sudo umount /mnt/build/vendor_img/system
-
-      - name: 打包vendor_dlkm.img
-        run: |
+          
+          # 打包vendor_dlkm.img
           mkdir -p /mnt/build/out/vendor_dlkm
           cp -r /mnt/build/device/rubens/dlkm/* /mnt/build/out/vendor_dlkm/
           find /mnt/build/out/vendor_dlkm -print0 | cpio -0 -H newc -o | gzip > /mnt/build/out/vendor_dlkm.img
 
+      # 步骤10：上传产物
       - name: 上传编译产物
         uses: actions/upload-artifact@v4
         with:
           name: final-artifacts-${{ github.event.inputs.device }}
           path: /mnt/build/out/
           retention-days: 14
-    
