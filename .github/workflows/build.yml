@@ -1,74 +1,79 @@
-name: Build Redmi SM8450 (vendor/dtb/dtbo)
+name: 极简编译（仅内核+厂商库）
 on:
   workflow_dispatch:
     inputs:
       device:
         default: "rubens"
         type: string
-      build_type:
-        default: "userdebug"
-        type: choice
-        options: [user, userdebug, eng]
 
 jobs:
   build:
     runs-on: ubuntu-22.04
     steps:
-      - name: Checkout configs
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-
-      - name: 清理磁盘空间
+      - name: 极致清理（释放50GB+空间）
         run: |
-          sudo docker system prune -af
-          sudo rm -rf /var/lib/docker /var/lib/containerd /usr/local/lib/android /usr/share/dotnet /opt/ghc
-          sudo rm -rf /var/cache/apt/archives/* /var/log/* /tmp/* ~/.cache
-          sudo apt clean
-          sudo apt autoremove -y --purge
-          df -h /mnt
+          # 删除所有非必要系统组件
+          sudo rm -rf /usr/* /opt/* /var/* /lib/*/docker /snap/*
+          sudo rm -rf /home/runner/*
+          df -h
 
-      - name: 安装依赖
+      - name: 安装最小编译工具
         run: |
           sudo apt update
-          sudo apt install -y git git-lfs curl repo bc bison build-essential ccache flex g++-multilib gcc-multilib lib32ncurses5-dev lib32readline-dev lib32z1-dev libelf-dev liblz4-tool libncurses5-dev zlib1g-dev openjdk-17-jdk-headless
-          sudo apt remove -y repo
-          curl https://storage.googleapis.com/git-repo-downloads/repo > ~/repo && chmod a+x ~/repo && sudo mv ~/repo /usr/local/bin/
+          sudo apt install -y git gcc-aarch64-linux-gnu make bc bison flex libssl-dev dtc
 
-      - name: 同步源码（使用正确的XML）
+      - name: 拉取内核源码（单独拉取，不依赖repo）
         run: |
-          sudo mkdir -p /mnt/android/redmi
-          sudo chown -R $USER:$USER /mnt/android
-          cd /mnt/android/redmi
+          mkdir -p /mnt/build/kernel
+          cd /mnt/build/kernel
+          git clone --depth=1 https://github.com/LineageOS/android_kernel_xiaomi_sm8450.git -b lineage-20 .
 
-          # 初始化Repo
-          repo init -u https://github.com/LineageOS/android.git -b lineage-20.0 --depth=1 --no-clone-bundle
-
-          # 复制格式正确的manifest文件
-          mkdir -p .repo/local_manifests
-          cp $GITHUB_WORKSPACE/local_manifests/redmi-sm8450.xml .repo/local_manifests/
-          cp $GITHUB_WORKSPACE/local_manifests/exclude.xml .repo/local_manifests/
-
-          # 直接同步，不做复杂验证
-          repo sync -c -j1 --no-tags --force-sync
-
-      - name: 编译组件
+      - name: 拉取厂商库（单独拉取）
         run: |
-          cd /mnt/android/redmi
-          export USE_CCACHE=0
-          source build/envsetup.sh
-          lunch ${{ github.event.inputs.device }}-${{ github.event.inputs.build_type }}
-          make vendorimage vendor_dlkmimage dtb dtboimg -j$(nproc --all)
+          mkdir -p /mnt/build/vendor/rubens
+          cd /mnt/build/vendor/rubens
+          git clone --depth=1 https://github.com/LineageOS/android_vendor_xiaomi_rubens.git -b lineage-20 .
+          
+          mkdir -p /mnt/build/vendor/sm8450-common
+          cd /mnt/build/vendor/sm8450-common
+          git clone --depth=1 https://github.com/LineageOS/android_vendor_xiaomi_sm8450-common.git -b lineage-20 .
 
-      - name: 收集并上传产物
+      - name: 编译内核（生成dtb/dtbo）
+        run: |
+          cd /mnt/build/kernel
+          # 使用设备默认配置
+          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- vendor/rubens_defconfig
+          # 编译内核和设备树
+          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- -j$(nproc) dtbs dtbo.img
+          # 复制产物
+          mkdir -p /mnt/build/out
+          cp arch/arm64/boot/dtb /mnt/build/out/dtb.img
+          cp arch/arm64/boot/dtbo.img /mnt/build/out/
+
+      - name: 打包vendor镜像（简化版）
+        run: |
+          # 创建临时目录
+          mkdir -p /mnt/build/out/vendor
+          # 复制厂商库文件
+          cp -r /mnt/build/vendor/rubens/* /mnt/build/out/vendor/
+          cp -r /mnt/build/vendor/sm8450-common/* /mnt/build/out/vendor/
+          # 打包为ext4镜像（简化版，实际可能需要更复杂的配置）
+          dd if=/dev/zero of=/mnt/build/out/vendor.img bs=1M count=2048
+          mkfs.ext4 /mnt/build/out/vendor.img
+          mkdir -p /mnt/tmp
+          mount /mnt/build/out/vendor.img /mnt/tmp
+          cp -r /mnt/build/out/vendor/* /mnt/tmp/
+          umount /mnt/tmp
+
+      - name: 收集产物
         run: |
           mkdir -p $GITHUB_WORKSPACE/out
-          cp /mnt/android/redmi/out/target/product/${{ github.event.inputs.device }}/*.img $GITHUB_WORKSPACE/out/ || true
+          cp /mnt/build/out/*.img $GITHUB_WORKSPACE/out/
           ls -lh $GITHUB_WORKSPACE/out/
 
       - name: 上传产物
         uses: actions/upload-artifact@v4
         with:
-          name: redmi-artifacts-${{ github.event.inputs.device }}
+          name: redmi-minimal-artifacts
           path: out/
           retention-days: 7
