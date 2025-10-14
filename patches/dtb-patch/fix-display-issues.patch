@@ -1,15 +1,14 @@
-# 针对SM8450显示面板配置（需匹配你的屏幕型号）
 diff --git a/arch/arm64/boot/dts/qcom/sm8450-dsi-panel.dtsi b/arch/arm64/boot/dts/qcom/sm8450-dsi-panel.dtsi
 index 9e3f2c1..d5b7a8c 100644
 --- a/arch/arm64/boot/dts/qcom/sm8450-dsi-panel.dtsi
 +++ b/arch/arm64/boot/dts/qcom/sm8450-dsi-panel.dtsi
 @@ -86,7 +86,7 @@
         panel-timing {
-                clock-frequency = <192000000>;  // 显示时钟频率
-                hactive = <2560>;  // 屏幕宽度
-                vactive = <1440>;  // 屏幕高度
--               refresh-rate = <60>;  // 原厂刷新率
-+               refresh-rate = <90>;  // 调整为屏幕支持的刷新率（如90Hz）
+                clock-frequency = <192000000>;
+                hactive = <2560>;
+                vactive = <1440>;
+-               refresh-rate = <60>;
++               refresh-rate = <90>;
                 hfront-porch = <80>;
                 hback-porch = <80>;
                 vfront-porch = <20>;
@@ -17,7 +16,7 @@ index 9e3f2c1..d5b7a8c 100644
         qcom,mdss-dsi-bl-pmic-control;
         qcom,mdss-dsi-bl-min-level = <1>;
         qcom,mdss-dsi-bl-max-level = <255>;
-+       qcom,mdss-dsi-bl-pwm-frequency = <20000>;  // 修复背光闪烁（调整PWM频率）
++       qcom,mdss-dsi-bl-pwm-frequency = <20000>;
         qcom,mdss-dsi-phy-mode = "dsi_phy_2_4g";
-        qcom,mdss-dsi-bus-width = <4>;  // 数据总线宽度（需匹配屏幕）
+        qcom,mdss-dsi-bus-width = <4>;
  };
