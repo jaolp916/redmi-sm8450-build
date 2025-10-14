@@ -1,0 +1,20 @@
+# 针对vendor分区文件权限配置
+diff --git a/arch/arm64/boot/dts/qcom/sm8450-vendor-config.dtsi b/arch/arm64/boot/dts/qcom/sm8450-vendor-config.dtsi
+index 3c2d1e0..f9a7b5c 100644
+--- a/arch/arm64/boot/dts/qcom/sm8450-vendor-config.dtsi
++++ b/arch/arm64/boot/dts/qcom/sm8450-vendor-config.dtsi
+@@ -28,10 +28,10 @@
+        // 修复vendor分区文件权限（默认644可能导致执行失败）
+        qcom,vendor-file-permissions {
+-               "/vendor/bin/hw/*" = "0644";  // 原厂只读权限
+-               "/vendor/lib64/*" = "0644";
++               "/vendor/bin/hw/*" = "0755";  // 改为可执行权限
++               "/vendor/lib64/*" = "0755";  // 允许驱动库加载
+        };
+
+        // 修复文件路径映射（解决“找不到文件”错误）
+        qcom,vendor-path-mapping {
+-               "/vendor/etc/firmware" = "/firmware";  // 原厂路径映射错误
++               "/vendor/etc/firmware" = "/vendor/firmware";  // 修正为实际路径
+        };
+ };
