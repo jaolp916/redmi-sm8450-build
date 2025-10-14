@@ -1,22 +1,10 @@
-diff --git a/dts/sm8450-common.dtsi b/dts/sm8450-common.dtsi
-index 2d1e3f4..8c7b6a5 100644
---- a/dts/sm8450-common.dtsi
-+++ b/dts/sm8450-common.dtsi
-@@ -692,7 +692,7 @@
-        panel-timing {
-                clock-frequency = <270000000>;
-                hactive = <2560>;  /* 匹配diting的2K分辨率 */
-                vactive = <1440>;
--               refresh-rate = <60>;
-+               refresh-rate = <120>;  /* 解锁120Hz刷新率 */
-                hfront-porch = <80>;
-                hback-porch = <80>;
-                vfront-porch = <20>;
-@@ -720,6 +720,7 @@
-        qcom,mdss-dsi-bl-pmic-control;
-        qcom,mdss-dsi-bl-min-level = <1>;
-        qcom,mdss-dsi-bl-max-level = <255>;
-+       qcom,mdss-dsi-bl-pwm-frequency = <24000>;  /* 解决高刷新率闪烁 */
-        qcom,mdss-dsi-phy-mode = "dsi_phy_2_4g";
-        qcom,mdss-dsi-bus-width = <4>;
- };
+diff --git a/properties/system.prop b/properties/system.prop
+index 3a2f1c4..9d7e5b6 100644
+--- a/properties/system.prop
++++ b/properties/system.prop
+@@ -25,3 +25,5 @@ ro.sf.lcd_density=480
+ # Display
+ ro.displayfeature.hdr=true
+ ro.displayfeature.hdr10=true
++ro.sf.refresh_rate=120  # 强制设置刷新率为120Hz
++persist.vendor.display.dc_dimming=0  # 关闭DC调光解决闪烁（可选）
