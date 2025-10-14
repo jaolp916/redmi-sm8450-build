@@ -39,7 +39,7 @@ jobs:
         run: |
           mkdir -p /mnt/build/kernel && cd /mnt/build/kernel
           # 方案1：使用GitLab的Android内核源（小米SM8450通用）
-          if wget -q --spider "https://gitlab.com/LineageOS/android_kernel_xiaomi_sm8450.git"; then
+          if wget -q --spider "https://github.com/LineageOS/android_kernel_xiaomi_sm8450.git"; then
             git clone --depth=1 https://gitlab.com/LineageOS/android_kernel_xiaomi_sm8450.git -b lineage-20 .
           # 方案2：使用Codeberg的社区备份源
           elif wget -q --spider "https://codeberg.org/Xiaomi-SM8450/android_kernel_xiaomi_sm8450.git"; then
@@ -62,7 +62,7 @@ jobs:
         run: |
           mkdir -p /mnt/build/device/rubens && cd /mnt/build/device/rubens
           # 方案1：GitLab社区设备树
-          if wget -q --spider "https://gitlab.com/ArrowOS-Devices/android_device_xiaomi_rubens.git"; then
+          if wget -q --spider "https://github.com/LineageOS/android_device_xiaomi_sm8450-common.git"; then
             git clone --depth=1 https://gitlab.com/ArrowOS-Devices/android_device_xiaomi_rubens.git -b arrow-13 .
           # 方案2：Codeberg备份
           elif wget -q --spider "https://codeberg.org/ProjectElixir/device_xiaomi_rubens.git"; then
