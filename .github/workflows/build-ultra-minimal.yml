@@ -41,33 +41,64 @@ jobs:
           sudo chown -R $USER:$USER /mnt/build
           ls -ld /mnt/build
 
-      # 步骤5：配置SSH并拉取源码
-      - name: 配置SSH并拉取源码
+      - name: 配置GitHub SSH访问
         run: |
-          # 配置SSH信任GitHub主机
           mkdir -p ~/.ssh
           ssh-keyscan github.com >> ~/.ssh/known_hosts
-          
-          # 拉取内核源码
-          mkdir -p /mnt/build/kernel && cd /mnt/build/kernel
-          git clone --depth=1 git@github.com:LineageOS/android_kernel_xiaomi_sm8450.git -b lineage-21 . || \
-          git clone --depth=1 git@github.com:LineageOS/android_kernel_xiaomi_sm8450.git .
-          
-          # 拉取设备树
-          mkdir -p /mnt/build/device/rubens && cd /mnt/build/device/rubens
-          git clone --depth=1 git@github.com:LineageOS/android_device_xiaomi_rubens.git -b lineage-21 . || \
-          git clone --depth=1 git@github.com:LineageOS/android_device_xiaomi_rubens.git .
-          
-          # 拉取设备专属厂商库
-          mkdir -p /mnt/build/vendor/rubens && cd /mnt/build/vendor/rubens
-          git clone --depth=1 git@github.com:LineageOS/android_vendor_xiaomi_rubens.git -b lineage-21 . || \
-          git clone --depth=1 git@github.com:LineageOS/android_vendor_xiaomi_rubens.git .
-          
-          # 拉取通用厂商库
-          mkdir -p /mnt/build/vendor/sm8450-common && cd /mnt/build/vendor/sm8450-common
-          git clone --depth=1 git@github.com:LineageOS/android_vendor_xiaomi_sm8450-common.git -b lineage-21 . || \
-          git clone --depth=1 git@github.com:LineageOS/android_vendor_xiaomi_sm8450-common.git .
+          ssh -T git@github.com || echo "SSH配置完成（非错误）"
 
+      - name: 拉取内核源码（SSH协议+重试）
+        run: |
+          mkdir -p /mnt/build/kernel
+          cd /mnt/build/kernel
+          for i in {1..3}; do
+            if git clone --depth=1 git@github.com:LineageOS/android_kernel_xiaomi_sm8450.git -b lineage-21 .; then
+              break
+            else
+              echo "第$i次克隆失败，重试..."
+              sleep 5
+            fi
+          done
+
+      - name: 拉取设备树与厂商库（SSH协议+重试）
+        run: |
+          # 设备树
+          mkdir -p /mnt/build/device/rubens
+          cd /mnt/build/device/rubens
+          for i in {1..3}; do
+            if git clone --depth=1 git@github.com:LineageOS/android_device_xiaomi_rubens.git -b lineage-21 .; then
+              break
+            else
+              echo "第$i次克隆失败，重试..."
+              sleep 5
+            fi
+          done
+          
+          # 设备专属厂商库
+          mkdir -p /mnt/build/vendor/rubens
+          cd /mnt/build/vendor/rubens
+          for i in {1..3}; do
+            if git clone --depth=1 git@github.com:LineageOS/android_vendor_xiaomi_rubens.git -b lineage-21 .; then
+              break
+            else
+              echo "第$i次克隆失败，重试..."
+              sleep 5
+            fi
+          done
+          
+          # 通用厂商库
+          mkdir -p /mnt/build/vendor/sm8450-common
+          cd /mnt/build/vendor/sm8450-common
+          for i in {1..3}; do
+            if git clone --depth=1 git@github.com:LineageOS/android_vendor_xiaomi_sm8450-common.git -b lineage-21 .; then
+              break
+            else
+              echo "第$i次克隆失败，重试..."
+              sleep 5
+            fi
+          done
+
+      
       # 步骤6：全仓库搜索apply-all-patches.sh（核心步骤）
       - name: 全仓库搜索补丁脚本
         id: find_script
