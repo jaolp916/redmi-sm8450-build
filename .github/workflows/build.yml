@@ -1,79 +1,90 @@
-name: 极简编译（仅内核+厂商库）
+name: 修复硬件问题的完整编译流程
 on:
   workflow_dispatch:
     inputs:
       device:
+        description: "设备代号（如Redmi K50 Ultra：rubens）"
+        required: true
         default: "rubens"
         type: string
+      build_type:
+        description: "编译类型"
+        required: true
+        default: "userdebug"
+        type: choice
+        options: [user, userdebug, eng]
 
 jobs:
-  build:
+  build_with_patches:
     runs-on: ubuntu-22.04
     steps:
-      - name: 极致清理（释放50GB+空间）
-        run: |
-          # 删除所有非必要系统组件
-          sudo rm -rf /usr/* /opt/* /var/* /lib/*/docker /snap/*
-          sudo rm -rf /home/runner/*
-          df -h
+      - name: 拉取仓库配置（含补丁和脚本）
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
-      - name: 安装最小编译工具
+      - name: 极致清理磁盘空间（确保足够编译）
+        run: |
+          # 删除超大无用文件
+          sudo rm -rf /var/lib/docker /usr/local/lib/android /usr/share/dotnet /opt/ghc
+          sudo rm -rf /var/cache/apt/archives/* /var/log/* /tmp/* ~/.cache
+          sudo apt clean && sudo apt autoremove -y --purge
+          # 查看清理后空间
+          df -h /mnt
+
+      - name: 安装编译依赖
         run: |
           sudo apt update
-          sudo apt install -y git gcc-aarch64-linux-gnu make bc bison flex libssl-dev dtc
+          sudo apt install -y git git-lfs curl repo bc bison build-essential ccache flex g++-multilib gcc-multilib lib32ncurses5-dev lib32readline-dev lib32z1-dev libelf-dev liblz4-tool libncurses5-dev zlib1g-dev openjdk-17-jdk-headless
+          # 安装最新repo工具
+          sudo apt remove -y repo
+          curl https://storage.googleapis.com/git-repo-downloads/repo > ~/repo && chmod a+x ~/repo && sudo mv ~/repo /usr/local/bin/
 
-      - name: 拉取内核源码（单独拉取，不依赖repo）
+      - name: 同步完整源码（含设备树和内核）
         run: |
-          mkdir -p /mnt/build/kernel
-          cd /mnt/build/kernel
-          git clone --depth=1 https://github.com/LineageOS/android_kernel_xiaomi_sm8450.git -b lineage-20 .
-
-      - name: 拉取厂商库（单独拉取）
-        run: |
-          mkdir -p /mnt/build/vendor/rubens
-          cd /mnt/build/vendor/rubens
-          git clone --depth=1 https://github.com/LineageOS/android_vendor_xiaomi_rubens.git -b lineage-20 .
+          # 创建源码目录并授权
+          sudo mkdir -p /mnt/android/redmi
+          sudo chown -R $USER:$USER /mnt/android
+          cd /mnt/android/redmi
           
-          mkdir -p /mnt/build/vendor/sm8450-common
-          cd /mnt/build/vendor/sm8450-common
-          git clone --depth=1 https://github.com/LineageOS/android_vendor_xiaomi_sm8450-common.git -b lineage-20 .
+          # 初始化LineageOS源码（lineage-20分支）
+          repo init -u https://github.com/LineageOS/android.git -b lineage-20.0 --depth=1 --no-clone-bundle
+          
+          # 复制设备专属manifest（仅保留设备树、内核等）
+          mkdir -p .repo/local_manifests
+          cp $GITHUB_WORKSPACE/local_manifests/redmi-sm8450.xml .repo/local_manifests/
+          
+          # 同步源码（低并行度避免空间不足）
+          repo sync -c -j2 --no-tags --force-sync
+          df -h /mnt
 
-      - name: 编译内核（生成dtb/dtbo）
+      - name: 应用所有补丁（核心修复步骤）
         run: |
-          cd /mnt/build/kernel
-          # 使用设备默认配置
-          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- vendor/rubens_defconfig
-          # 编译内核和设备树
-          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- -j$(nproc) dtbs dtbo.img
-          # 复制产物
-          mkdir -p /mnt/build/out
-          cp arch/arm64/boot/dtb /mnt/build/out/dtb.img
-          cp arch/arm64/boot/dtbo.img /mnt/build/out/
+          # 赋予脚本执行权限
+          chmod +x $GITHUB_WORKSPACE/scripts/apply-all-patches.sh
+          
+          # 执行补丁应用脚本（解决电池容量、显示、分区解锁等问题）
+          $GITHUB_WORKSPACE/scripts/apply-all-patches.sh || {
+            echo "❌ 补丁应用失败，终止编译"
+            exit 1
+          }
 
-      - name: 打包vendor镜像（简化版）
+      - name: 编译核心镜像（带补丁修复）
         run: |
-          # 创建临时目录
-          mkdir -p /mnt/build/out/vendor
-          # 复制厂商库文件
-          cp -r /mnt/build/vendor/rubens/* /mnt/build/out/vendor/
-          cp -r /mnt/build/vendor/sm8450-common/* /mnt/build/out/vendor/
-          # 打包为ext4镜像（简化版，实际可能需要更复杂的配置）
-          dd if=/dev/zero of=/mnt/build/out/vendor.img bs=1M count=2048
-          mkfs.ext4 /mnt/build/out/vendor.img
-          mkdir -p /mnt/tmp
-          mount /mnt/build/out/vendor.img /mnt/tmp
-          cp -r /mnt/build/out/vendor/* /mnt/tmp/
-          umount /mnt/tmp
+          cd /mnt/android/redmi
+          # 执行编译脚本（生成vendor、dtb等镜像）
+          chmod +x $GITHUB_WORKSPACE/scripts/build.sh
+          $GITHUB_WORKSPACE/scripts/build.sh ${{ github.event.inputs.device }} ${{ github.event.inputs.build_type }}
 
-      - name: 收集产物
+      - name: 收集修复后的产物
         run: |
           mkdir -p $GITHUB_WORKSPACE/out
-          cp /mnt/build/out/*.img $GITHUB_WORKSPACE/out/
-          ls -lh $GITHUB_WORKSPACE/out/
+          cp /mnt/android/redmi/out/target/product/${{ github.event.inputs.device }}/{vendor.img,vendor_dlkm.img,dtb.img,dtbo.img} $GITHUB_WORKSPACE/out/
+          ls -lh $GITHUB_WORKSPACE/out/  # 显示产物信息
 
-      - name: 上传产物
+      - name: 上传修复后的镜像
         uses: actions/upload-artifact@v4
         with:
-          name: redmi-minimal-artifacts
+          name: fixed-artifacts-${{ github.event.inputs.device }}
           path: out/
-          retention-days: 7
+          retention-days: 14  # 延长保存时间，方便测试
