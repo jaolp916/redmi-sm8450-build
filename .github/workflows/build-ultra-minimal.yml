@@ -15,53 +15,6 @@ jobs:
         with:
           fetch-depth: 1  # 确保拉取所有文件（包括scripts和patches目录）
 
-      - name: 验证关键文件是否存在（新增检查步骤）
-        run: |
-          # 检查补丁目录和脚本是否存在
-          if [ ! -d "$GITHUB_WORKSPACE/patches/dtb-patch" ]; then
-            echo "❌ 补丁目录 $GITHUB_WORKSPACE/patches/dtb-patch 不存在！"
-            exit 1
-          fi
-          if [ ! -f "$GITHUB_WORKSPACE/scripts/apply-all-patches.sh" ]; then
-            echo "⚠️ 未找到补丁脚本，创建基础版..."
-            # 自动创建基础版脚本（避免后续步骤失败）
-            mkdir -p "$GITHUB_WORKSPACE/scripts"
-            cat > "$GITHUB_WORKSPACE/scripts/apply-all-patches.sh" << 'EOF'
-            #!/bin/bash
-            set -euo pipefail
-
-            # 基础版补丁应用脚本
-            PATCH_DIR="$GITHUB_WORKSPACE/patches/dtb-patch"
-            KERNEL_DIR="/mnt/build/kernel"
-
-            echo "应用补丁目录: $PATCH_DIR"
-            if [ ! -d "$PATCH_DIR" ]; then
-            echo "错误：补丁目录不存在！"
-            exit 1
-            fi
-
-            if [ ! -d "$KERNEL_DIR" ]; then
-            echo "错误：内核目录 $KERNEL_DIR 不存在！"
-            exit 1
-            fi
-
-            # 应用所有.patch文件
-            for patch in "$PATCH_DIR"/*.patch; do
-            if [ -f "$patch" ]; then
-            echo "应用补丁: $(basename "$patch")"
-            git -C "$KERNEL_DIR" apply "$patch" || {
-            echo "补丁 $(basename "$patch") 应用失败！"
-            exit 1
-            }
-            fi
-            done
-
-            echo "所有补丁应用完成"
-            EOF
-          fi
-          # 确保脚本有执行权限
-          chmod +x "$GITHUB_WORKSPACE/scripts/apply-all-patches.sh"
-
       - name: 安全清理磁盘空间
         run: |
           set -euo pipefail
@@ -164,7 +117,7 @@ jobs:
       - name: 应用补丁（解锁电池/显示/分区）
         run: |
           # 明确脚本路径（与仓库结构匹配）
-          "$GITHUB_WORKSPACE/scripts/apply-all-patches.sh"
+          "https://github.com/jaolp916/redmi-sm8450-build/blob/main/scripts/apply-all-patches.sh"
 
       - name: 编译内核和设备树
         run: |
