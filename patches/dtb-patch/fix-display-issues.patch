@@ -1,30 +1,12 @@
 diff --git a/arch/arm64/boot/dts/qcom/sm8450-diting-dsi-panel.dtsi b/arch/arm64/boot/dts/qcom/sm8450-diting-dsi-panel.dtsi
-index 3f7a2d1b2..c8e5d2f1e 100644
+index 1234567..abcdefg 100644
 --- a/arch/arm64/boot/dts/qcom/sm8450-diting-dsi-panel.dtsi
 +++ b/arch/arm64/boot/dts/qcom/sm8450-diting-dsi-panel.dtsi
-@@ -78,7 +78,7 @@
-        panel-timing {
-                clock-frequency = <270000000>;
-                hactive = <2560>;
-                vactive = <1440>;
--               refresh-rate = <60>;
-+               refresh-rate = <120>;  /* 修复：将刷新率从60Hz提升至120Hz */
-                hfront-porch = <80>;
-                hback-porch = <80>;
-                vfront-porch = <20>;
 @@ -102,6 +102,7 @@
         qcom,mdss-dsi-bl-pmic-control;
         qcom,mdss-dsi-bl-min-level = <1>;
         qcom,mdss-dsi-bl-max-level = <255>;
-+       qcom,mdss-dsi-bl-pwm-frequency = <24000>;  /* 修复：添加PWM频率配置，解决屏幕闪烁 */
++       qcom,mdss-dsi-bl-pwm-frequency = <24000>;
         qcom,mdss-dsi-phy-mode = "dsi_phy_2_4g";
         qcom,mdss-dsi-bus-width = <4>;
-        qcom,mdss-dsi-panel-type = "dsc";
-@@ -110,6 +111,7 @@
-        qcom,mdss-dsi-dsc-pps = <0x00000300 0x00000000 0x00000000 0x00000000 0x00000000 0x00000000>;
-        qcom,mdss-dsi-dsc-slices = <4>;
-        qcom,mdss-dsi-dsc-slice-height = <180>;
-+       qcom,mdss-dsi-no-command-mode;  /* 修复：禁用命令模式，适配高刷新率 */
  };
- 
- &mdss_dsi0 {
