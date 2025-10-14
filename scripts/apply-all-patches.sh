@@ -1,36 +1,34 @@
 #!/bin/bash
 set -euo pipefail
 
-# 明确指定补丁目录（与工作流中一致，基于仓库根目录）
-PATCH_DIR="$GITHUB_WORKSPACE/patches/dtb-patch"
-KERNEL_DIR="/mnt/build/kernel"
+PATCH_DIR="/home/runner/work/redmi-sm8450-build/redmi-sm8450-build/patches/dtb-patch"
+# 关键：指定设备仓库目录（而非内核目录）
+DEVICE_DIR="/mnt/build/device/xiaomi/diting"
 
-# 二次检查补丁目录（即使工作流通过，脚本内再确认一次）
-if [ ! -d "$PATCH_DIR" ]; then
-  echo "❌ 脚本内错误：补丁目录 $PATCH_DIR 不存在！"
-  echo "请检查仓库目录结构是否为：仓库根目录/patches/dtb-patch/"
+# 验证设备仓库存在
+if [ ! -d "$DEVICE_DIR" ]; then
+  echo "❌ 设备仓库不存在：$DEVICE_DIR"
   exit 1
 fi
 
-# 检查内核目录
-if [ ! -d "$KERNEL_DIR" ]; then
-  echo "❌ 脚本内错误：内核目录 $KERNEL_DIR 不存在！"
+# 验证目标文件确实存在于设备仓库
+TARGET_FILE="$DEVICE_DIR/properties/system.prop"
+if [ ! -f "$TARGET_FILE" ]; then
+  echo "❌ 设备仓库中确实没有该文件：$TARGET_FILE"
+  # 再次搜索设备仓库中的.prop文件
+  find "$DEVICE_DIR" -name "*.prop"
   exit 1
 fi
 
-# 应用补丁
-echo "=== 开始应用补丁（来自 $PATCH_DIR） ==="
+# 在设备仓库目录中应用补丁
+echo "=== 开始在设备仓库中应用补丁 ==="
 for patch in "$PATCH_DIR"/*.patch; do
-  if [ -f "$patch" ]; then
-    patch_name=$(basename "$patch")
-    echo "应用：$patch_name"
-    git -C "$KERNEL_DIR" apply "$patch" || {
-      echo "❌ 补丁 $patch_name 应用失败！可能原因："
-      echo "1. 补丁与内核版本不匹配（请检查内核分支是否正确）"
-      echo "2. 补丁路径错误（实际路径：$patch）"
-      exit 1
-    }
-  fi
+  patch_name=$(basename "$patch")
+  echo "应用：$patch_name"
+  # 重要：在设备仓库目录中执行git apply
+  git -C "$DEVICE_DIR" apply "$patch" || {
+    echo "❌ 补丁 $patch_name 应用失败，尝试直接用patch命令"
+    # 备用方案：使用patch命令强制应用（不依赖Git跟踪）
+    cd "$DEVICE_DIR" && patch -p1 < "$patch"
+  }
 done
-
-echo "✅ 所有补丁应用成功"
