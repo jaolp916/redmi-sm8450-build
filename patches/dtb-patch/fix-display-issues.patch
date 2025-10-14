@@ -1,12 +1,12 @@
-diff --git a/arch/arm64/boot/dts/qcom/sm8450-diting-dsi-panel.dtsi b/arch/arm64/boot/dts/qcom/sm8450-diting-dsi-panel.dtsi
-index 1234567..abcdefg 100644
---- a/arch/arm64/boot/dts/qcom/sm8450-diting-dsi-panel.dtsi
-+++ b/arch/arm64/boot/dts/qcom/sm8450-diting-dsi-panel.dtsi
-@@ -102,6 +102,7 @@
+diff --git a/arch/arm64/boot/dts/qcom/sm8450-diting.dtsi b/arch/arm64/boot/dts/qcom/sm8450-diting.dtsi
+index 5f7b3d2..9a1c7e4 100644
+--- a/arch/arm64/boot/dts/qcom/sm8450-diting.dtsi
++++ b/arch/arm64/boot/dts/qcom/sm8450-diting.dtsi
+@@ -856,6 +856,7 @@
         qcom,mdss-dsi-bl-pmic-control;
         qcom,mdss-dsi-bl-min-level = <1>;
         qcom,mdss-dsi-bl-max-level = <255>;
-+       qcom,mdss-dsi-bl-pwm-frequency = <24000>;
++       qcom,mdss-dsi-bl-pwm-frequency = <24000>; 
         qcom,mdss-dsi-phy-mode = "dsi_phy_2_4g";
         qcom,mdss-dsi-bus-width = <4>;
- };
+        qcom,mdss-dsi-panel-type = "dsc";
