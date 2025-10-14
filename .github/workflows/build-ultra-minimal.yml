@@ -62,7 +62,7 @@ jobs:
         run: |
           mkdir -p /mnt/build/device/rubens && cd /mnt/build/device/rubens
           # 方案1：GitLab社区设备树
-          if wget -q --spider "https://github.com/LineageOS/android_device_xiaomi_sm8450-common.git"; then
+          if wget -q --spider "https://github.com/LineageOS/android_device_xiaomi_diting.git"; then
             git clone --depth=1 https://gitlab.com/ArrowOS-Devices/android_device_xiaomi_rubens.git -b arrow-13 .
           # 方案2：Codeberg备份
           elif wget -q --spider "https://codeberg.org/ProjectElixir/device_xiaomi_rubens.git"; then
