@@ -1,18 +1,11 @@
-diff --git a/arch/arm64/boot/dts/qcom/sm8450-diting-storage.dtsi b/arch/arm64/boot/dts/qcom/sm8450-diting-storage.dtsi
-index d2f1c78..e7b3a90 100644
---- a/arch/arm64/boot/dts/qcom/sm8450-diting-storage.dtsi
-+++ b/arch/arm64/boot/dts/qcom/sm8450-diting-storage.dtsi
-@@ -62,7 +62,7 @@
-        partitions {
-                compatible = "fixed-partitions";
-                #address-cells = <1>;
-                #size-cells = <1>;
- 
--               sys {
-+               sys {  /* 解锁sys分区为可读写 */
-                        label = "sys";
-                        reg = <0x1F000000 0x6000000>;  /* 分区起始地址和大小 */
--                       read-only;  /* 原始配置：只读 */
-+                       /* 移除read-only属性，改为可读写 */
-                };
-        };
+diff --git a/rootdir/etc/fstab.qcom b/rootdir/etc/fstab.qcom
+index 6d8e2f3..1c4b7d9 100644
+--- a/rootdir/etc/fstab.qcom
++++ b/rootdir/etc/fstab.qcom
+@@ -13,7 +13,7 @@
+ /dev/block/bootdevice/by-name/userdata       /data           f2fs    nosuid,nodev,noatime,discard,reserve_root=32768,resgid=1065    wait,check,fileencryption=aes-256-xts:aes-256-cts:v2+inlinecrypt_optimized
+ /dev/block/bootdevice/by-name/cache         /cache          ext4    nosuid,nodev,noatime,errors=panic    wait,check
+ /dev/block/bootdevice/by-name/metadata      /metadata       ext4    nosuid,nodev,noatime,errors=panic    wait,check
+-/dev/block/bootdevice/by-name/sys           /sys            ext4    ro,nosuid,nodev,noatime,errors=panic    wait,check
++/dev/block/bootdevice/by-name/sys           /sys            ext4    rw,nosuid,nodev,noatime,errors=panic    wait,check  /* 解锁为可读写 */
+ /dev/block/bootdevice/by-name/dsp           /dsp            ext4    nosuid,nodev,noatime,errors=panic    wait,check
