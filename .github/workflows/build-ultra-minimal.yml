@@ -1,4 +1,4 @@
-name: 安全极简编译（修复dtc包名错误）
+name: 安全极简编译（修复/mnt目录权限）
 on:
   workflow_dispatch:
     inputs:
@@ -39,16 +39,26 @@ jobs:
           # 查看空间
           df -h /mnt
 
-      - name: 安装最小编译依赖（修正dtc包名）
+      - name: 安装最小编译依赖
         run: |
           sudo apt update
-          # 关键修复：将dtc替换为正确的包名device-tree-compiler
           sudo apt install -y \
             git gcc-aarch64-linux-gnu make bc bison flex libssl-dev \
             device-tree-compiler cpio openssl liblz4-tool zstd
 
+      # 新增步骤：创建/mnt/build目录并授权（解决权限问题）
+      - name: 初始化编译目录（授权权限）
+        run: |
+          # 用sudo创建/mnt/build目录（需要root权限）
+          sudo mkdir -p /mnt/build
+          # 将目录所有权赋予当前用户（避免后续操作权限不足）
+          sudo chown -R $USER:$USER /mnt/build
+          # 验证权限
+          ls -ld /mnt/build  # 应显示当前用户为所有者
+
       - name: 拉取内核源码
         run: |
+          # 现在有权限创建子目录了
           mkdir -p /mnt/build/kernel
           cd /mnt/build/kernel
           git clone --depth=1 https://github.com/LineageOS/android_kernel_xiaomi_sm8450.git -b lineage-20 .
