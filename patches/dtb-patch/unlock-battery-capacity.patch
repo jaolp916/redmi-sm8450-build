@@ -1,15 +1,15 @@
-diff --git a/arch/arm64/boot/dts/qcom/sm8450-diting-pmic.dtsi b/arch/arm64/boot/dts/qcom/sm8450-diting-pmic.dtsi
-index 7c2d1e8..a9f3b5c 100644
---- a/arch/arm64/boot/dts/qcom/sm8450-diting-pmic.dtsi
-+++ b/arch/arm64/boot/dts/qcom/sm8450-diting-pmic.dtsi
-@@ -45,8 +45,8 @@
+diff --git a/dts/sm8450-common.dtsi b/dts/sm8450-common.dtsi
+index 2d1e3f4..3a5b7c9 100644
+--- a/dts/sm8450-common.dtsi
++++ b/dts/sm8450-common.dtsi
+@@ -389,8 +389,8 @@
         compatible = "qcom,pm8350b-bms";
         reg = <0x0008 0x0010>;
         interrupts = <0x0 0x08 0x0 IRQ_TYPE_EDGE_RISING>;
--       qcom,batt-id-resistor = <10000>;  /* 原始配置：限制充电上限 */
--       qcom,charge-full-capacity = <4900>;  /* 原始容量：4900mAh（限制值） */
-+       qcom,batt-id-resistor = <5000>;   /* 解锁限制：调整识别电阻值 */
-+       qcom,charge-full-capacity = <5000>;  /* 解锁至设计容量：5000mAh */
-        qcom,charge-term-current = <500>;
+-       qcom,charge-full-capacity = <4900>;  /* 通用限制值 */
+-       qcom,charge-term-current = <1000>;
++       qcom,charge-full-capacity = <5000>;  /* diting实际电池容量 */
++       qcom,charge-term-current = <500>;  /* 优化充电终止电流 */
         qcom,pre-charge-current = <256000>;
-        qcom,fast-charge-current = <3000000>;  /* 支持3A快充 */
+        qcom,fast-charge-current = <3000000>;  /* 保留3A快充 */
+ };
