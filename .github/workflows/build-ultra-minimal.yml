@@ -83,7 +83,7 @@ jobs:
         run: |
           # 设备专属厂商库
           mkdir -p /mnt/build/vendor/rubens && cd /mnt/build/vendor/rubens
-          if wget -q --spider "https://gitlab.com/ArrowOS-Devices/vendor_xiaomi_rubens.git"; then
+          if wget -q --spider "https://github.com/mohammadnt/vendor_xiaomi_diting.git"; then
             git clone --depth=1 https://gitlab.com/ArrowOS-Devices/vendor_xiaomi_rubens.git -b arrow-13 .
           elif wget -q "https://mirror.example.com/vendor-rubens.tar.gz"; then
             tar -zxf vendor-rubens.tar.gz --strip-components=1
