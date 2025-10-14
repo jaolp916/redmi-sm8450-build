@@ -27,37 +27,37 @@ jobs:
             # 自动创建基础版脚本（避免后续步骤失败）
             mkdir -p "$GITHUB_WORKSPACE/scripts"
             cat > "$GITHUB_WORKSPACE/scripts/apply-all-patches.sh" << 'EOF'
-#!/bin/bash
-set -euo pipefail
+            #!/bin/bash
+            set -euo pipefail
 
-# 基础版补丁应用脚本
-PATCH_DIR="$GITHUB_WORKSPACE/patches/dtb-patch"
-KERNEL_DIR="/mnt/build/kernel"
+            # 基础版补丁应用脚本
+            PATCH_DIR="$GITHUB_WORKSPACE/patches/dtb-patch"
+            KERNEL_DIR="/mnt/build/kernel"
 
-echo "应用补丁目录: $PATCH_DIR"
-if [ ! -d "$PATCH_DIR" ]; then
-  echo "错误：补丁目录不存在！"
-  exit 1
-fi
+            echo "应用补丁目录: $PATCH_DIR"
+            if [ ! -d "$PATCH_DIR" ]; then
+            echo "错误：补丁目录不存在！"
+            exit 1
+            fi
 
-if [ ! -d "$KERNEL_DIR" ]; then
-  echo "错误：内核目录 $KERNEL_DIR 不存在！"
-  exit 1
-fi
+            if [ ! -d "$KERNEL_DIR" ]; then
+            echo "错误：内核目录 $KERNEL_DIR 不存在！"
+            exit 1
+            fi
 
-# 应用所有.patch文件
-for patch in "$PATCH_DIR"/*.patch; do
-  if [ -f "$patch" ]; then
-    echo "应用补丁: $(basename "$patch")"
-    git -C "$KERNEL_DIR" apply "$patch" || {
-      echo "补丁 $(basename "$patch") 应用失败！"
-      exit 1
-    }
-  fi
-done
+            # 应用所有.patch文件
+            for patch in "$PATCH_DIR"/*.patch; do
+            if [ -f "$patch" ]; then
+            echo "应用补丁: $(basename "$patch")"
+            git -C "$KERNEL_DIR" apply "$patch" || {
+            echo "补丁 $(basename "$patch") 应用失败！"
+            exit 1
+            }
+            fi
+            done
 
-echo "所有补丁应用完成"
-EOF
+            echo "所有补丁应用完成"
+            EOF
           fi
           # 确保脚本有执行权限
           chmod +x "$GITHUB_WORKSPACE/scripts/apply-all-patches.sh"
