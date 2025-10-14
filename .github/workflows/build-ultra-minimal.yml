@@ -111,14 +111,6 @@ jobs:
           fi
           chmod +x "$SCRIPT"
 
-          # 在“应用补丁”步骤前添加，用于查找实际的设备树文件
-      - name: 搜索内核中diting的显示设备树文件
-        run: |
-          echo "=== 内核中所有与diting相关的设备树文件 ==="
-          find /mnt/build/kernel/arch/arm64/boot/dts/qcom/ -name "*diting*.dtsi"
-          echo -e "\n=== 重点查找显示/面板相关文件 ==="
-          find /mnt/build/kernel/arch/arm64/boot/dts/qcom/ -name "*diting*" | grep -i "display\|panel\|dsi"
-
       - name: 应用补丁
         run: |
           SCRIPT=$(find "$GITHUB_WORKSPACE" -name "apply-all-patches.sh" -type f -print -quit)
