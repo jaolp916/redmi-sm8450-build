@@ -94,18 +94,6 @@ jobs:
             exit 1
           fi
 
-          # 通用厂商库
-          mkdir -p /mnt/build/vendor/sm8450-common && cd /mnt/build/vendor/sm8450-common
-          if wget -q --spider "https://gitlab.com/LineageOS/android_vendor_xiaomi_sm8450-common.git"; then
-            git clone --depth=1 https://gitlab.com/LineageOS/android_vendor_xiaomi_sm8450-common.git -b lineage-20 .
-          elif wget -q "https://mirror.example.com/vendor-sm8450-common.tar.gz"; then
-            tar -zxf vendor-sm8450-common.tar.gz --strip-components=1
-          elif [ -d "$GITHUB_WORKSPACE/vendor-common-src" ]; then
-            cp -r "$GITHUB_WORKSPACE/vendor-common-src"/* .
-          else
-            echo "❌ 通用厂商库获取失败！请手动上传到vendor-common-src/"
-            exit 1
-          fi
 
       - name: 验证补丁和脚本
         run: |
