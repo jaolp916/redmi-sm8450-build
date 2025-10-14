@@ -1,4 +1,4 @@
-name: 安全极简编译（修复分支不存在错误）
+name: 安全极简编译（修复GitHub克隆错误）
 on:
   workflow_dispatch:
     inputs:
@@ -52,33 +52,66 @@ jobs:
           sudo chown -R $USER:$USER /mnt/build
           ls -ld /mnt/build
 
-      - name: 拉取内核源码（使用实际存在的分支）
+      # 新增：配置GitHub SSH密钥（解决认证问题）
+      - name: 配置GitHub SSH访问
+        run: |
+          # 添加GitHub SSH主机密钥（避免首次连接确认）
+          mkdir -p ~/.ssh
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+          # 验证SSH配置
+          ssh -T git@github.com || echo "SSH配置完成（非错误）"
+
+      - name: 拉取内核源码（SSH协议+重试）
         run: |
           mkdir -p /mnt/build/kernel
           cd /mnt/build/kernel
-          # 若lineage-20不存在，尝试lineage-21或删除-b参数使用默认分支
-          git clone --depth=1 https://github.com/LineageOS/android_kernel_xiaomi_sm8450.git -b lineage-21 . || \
-          git clone --depth=1 https://github.com/LineageOS/android_kernel_xiaomi_sm8450.git .
+          # 改用SSH协议，最多重试3次
+          for i in {1..3}; do
+            if git clone --depth=1 git@github.com:LineageOS/android_kernel_xiaomi_sm8450.git -b lineage-21 .; then
+              break
+            else
+              echo "第$i次克隆失败，重试..."
+              sleep 5
+            fi
+          done
 
-      - name: 拉取设备树与厂商库（使用实际存在的分支）
+      - name: 拉取设备树与厂商库（SSH协议+重试）
         run: |
-          # 设备树（调整分支）
+          # 设备树
           mkdir -p /mnt/build/device/rubens
           cd /mnt/build/device/rubens
-          git clone --depth=1 https://github.com/LineageOS/android_device_xiaomi_rubens.git -b lineage-21 . || \
-          git clone --depth=1 https://github.com/LineageOS/android_device_xiaomi_rubens.git .
+          for i in {1..3}; do
+            if git clone --depth=1 git@github.com:LineageOS/android_device_xiaomi_rubens.git -b lineage-21 .; then
+              break
+            else
+              echo "第$i次克隆失败，重试..."
+              sleep 5
+            fi
+          done
           
-          # 设备专属厂商库（调整分支）
+          # 设备专属厂商库
           mkdir -p /mnt/build/vendor/rubens
           cd /mnt/build/vendor/rubens
-          git clone --depth=1 https://github.com/LineageOS/android_vendor_xiaomi_rubens.git -b lineage-21 . || \
-          git clone --depth=1 https://github.com/LineageOS/android_vendor_xiaomi_rubens.git .
+          for i in {1..3}; do
+            if git clone --depth=1 git@github.com:LineageOS/android_vendor_xiaomi_rubens.git -b lineage-21 .; then
+              break
+            else
+              echo "第$i次克隆失败，重试..."
+              sleep 5
+            fi
+          done
           
-          # 通用厂商库（调整分支）
+          # 通用厂商库
           mkdir -p /mnt/build/vendor/sm8450-common
           cd /mnt/build/vendor/sm8450-common
-          git clone --depth=1 https://github.com/LineageOS/android_vendor_xiaomi_sm8450-common.git -b lineage-21 . || \
-          git clone --depth=1 https://github.com/LineageOS/android_vendor_xiaomi_sm8450-common.git .
+          for i in {1..3}; do
+            if git clone --depth=1 git@github.com:LineageOS/android_vendor_xiaomi_sm8450-common.git -b lineage-21 .; then
+              break
+            else
+              echo "第$i次克隆失败，重试..."
+              sleep 5
+            fi
+          done
 
       - name: 应用补丁（解锁电池/显示/分区）
         run: |
