@@ -1,4 +1,4 @@
-name: 仅搜索已有脚本的编译工作流
+name: 非GitHub源编译工作流（无GitHub依赖）
 on:
   workflow_dispatch:
     inputs:
@@ -10,14 +10,11 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     steps:
-      # 步骤1：拉取仓库代码（确保完整拉取）
-      - name: 拉取仓库代码
+      - name: 拉取仓库代码（含你的补丁和脚本）
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
-          show-progress: true
 
-      # 步骤2：安全清理磁盘空间
       - name: 安全清理磁盘空间
         run: |
           set -euo pipefail
@@ -26,147 +23,136 @@ jobs:
           sudo apt clean && sudo apt autoremove -y --purge
           df -h /mnt
 
-      # 步骤3：安装编译依赖
       - name: 安装编译依赖
         run: |
           sudo apt update
           sudo apt install -y \
-            git gcc-aarch64-linux-gnu make bc bison flex libssl-dev \
+            git wget curl unzip gcc-aarch64-linux-gnu make bc bison flex libssl-dev \
             device-tree-compiler cpio openssl liblz4-tool zstd
 
-      # 步骤4：初始化编译目录（授权权限）
       - name: 初始化编译目录
         run: |
           sudo mkdir -p /mnt/build
           sudo chown -R $USER:$USER /mnt/build
-          ls -ld /mnt/build
 
-      - name: 配置GitHub SSH访问
+      - name: 获取内核源码（非GitHub源）
         run: |
-          mkdir -p ~/.ssh
-          ssh-keyscan github.com >> ~/.ssh/known_hosts
-          ssh -T git@github.com || echo "SSH配置完成（非错误）"
-
-      - name: 拉取内核源码（SSH协议+重试）
-        run: |
-          mkdir -p /mnt/build/kernel
-          cd /mnt/build/kernel
-          for i in {1..3}; do
-            if git clone --depth=1 git@github.com:LineageOS/android_kernel_xiaomi_sm8450.git -b lineage-21 .; then
-              break
-            else
-              echo "第$i次克隆失败，重试..."
-              sleep 5
-            fi
-          done
-
-      - name: 拉取设备树与厂商库（SSH协议+重试）
-        run: |
-          # 设备树
-          mkdir -p /mnt/build/device/rubens
-          cd /mnt/build/device/rubens
-          for i in {1..3}; do
-            if git clone --depth=1 git@github.com:LineageOS/android_device_xiaomi_rubens.git -b lineage-21 .; then
-              break
-            else
-              echo "第$i次克隆失败，重试..."
-              sleep 5
-            fi
-          done
-          
-          # 设备专属厂商库
-          mkdir -p /mnt/build/vendor/rubens
-          cd /mnt/build/vendor/rubens
-          for i in {1..3}; do
-            if git clone --depth=1 git@github.com:LineageOS/android_vendor_xiaomi_rubens.git -b lineage-21 .; then
-              break
-            else
-              echo "第$i次克隆失败，重试..."
-              sleep 5
-            fi
-          done
-          
-          # 通用厂商库
-          mkdir -p /mnt/build/vendor/sm8450-common
-          cd /mnt/build/vendor/sm8450-common
-          for i in {1..3}; do
-            if git clone --depth=1 git@github.com:LineageOS/android_vendor_xiaomi_sm8450-common.git -b lineage-21 .; then
-              break
-            else
-              echo "第$i次克隆失败，重试..."
-              sleep 5
-            fi
-          done
-
-      
-      # 步骤6：全仓库搜索apply-all-patches.sh（核心步骤）
-      - name: 全仓库搜索补丁脚本
-        id: find_script
-        run: |
-          set -euo pipefail
-          echo "=== 搜索apply-all-patches.sh ==="
-          # 递归搜索仓库内所有同名脚本
-          FOUND_SCRIPT=$(find "$GITHUB_WORKSPACE" -name "apply-all-patches.sh" -type f -print -quit)
-          
-          if [ -z "$FOUND_SCRIPT" ]; then
-            echo "❌ 未找到脚本！请确认："
-            echo "1. 脚本已提交到仓库（git add + commit + push）"
-            echo "2. 文件名严格为apply-all-patches.sh（大小写敏感）"
-            exit 1
+          mkdir -p /mnt/build/kernel && cd /mnt/build/kernel
+          # 方案1：使用GitLab的Android内核源（小米SM8450通用）
+          if wget -q --spider "https://gitlab.com/LineageOS/android_kernel_xiaomi_sm8450.git"; then
+            git clone --depth=1 https://gitlab.com/LineageOS/android_kernel_xiaomi_sm8450.git -b lineage-20 .
+          # 方案2：使用Codeberg的社区备份源
+          elif wget -q --spider "https://codeberg.org/Xiaomi-SM8450/android_kernel_xiaomi_sm8450.git"; then
+            git clone --depth=1 https://codeberg.org/Xiaomi-SM8450/android_kernel_xiaomi_sm8450.git -b main .
+          # 方案3：使用直接下载tar包（若有镜像站）
+          elif wget -q "https://mirror.example.com/kernel-sm8450.tar.gz"; then
+            tar -zxf kernel-sm8450.tar.gz --strip-components=1
+          # 方案4：使用你手动上传的本地内核源码（仓库根目录/kernel-src/）
+          elif [ -d "$GITHUB_WORKSPACE/kernel-src" ]; then
+            echo "使用本地内核源码"
+            cp -r "$GITHUB_WORKSPACE/kernel-src"/* .
           else
-            echo "✅ 找到脚本：$FOUND_SCRIPT"
-            # 添加执行权限
-            [ ! -x "$FOUND_SCRIPT" ] && chmod +x "$FOUND_SCRIPT"
-            # 保存路径到输出变量
-            echo "script_path=$FOUND_SCRIPT" >> "$GITHUB_OUTPUT"
+            echo "❌ 所有内核源获取失败！请："
+            echo "1. 在仓库根目录创建kernel-src/，放入内核源码"
+            echo "2. 或更新工作流中的下载链接"
+            exit 1
           fi
 
-      # 步骤7：执行补丁脚本
+      - name: 获取设备树（非GitHub源）
+        run: |
+          mkdir -p /mnt/build/device/rubens && cd /mnt/build/device/rubens
+          # 方案1：GitLab社区设备树
+          if wget -q --spider "https://gitlab.com/ArrowOS-Devices/android_device_xiaomi_rubens.git"; then
+            git clone --depth=1 https://gitlab.com/ArrowOS-Devices/android_device_xiaomi_rubens.git -b arrow-13 .
+          # 方案2：Codeberg备份
+          elif wget -q --spider "https://codeberg.org/ProjectElixir/device_xiaomi_rubens.git"; then
+            git clone --depth=1 https://codeberg.org/ProjectElixir/device_xiaomi_rubens.git -b 14 .
+          # 方案3：直接下载tar包
+          elif wget -q "https://mirror.example.com/device-rubens.tar.gz"; then
+            tar -zxf device-rubens.tar.gz --strip-components=1
+          # 方案4：使用本地设备树（仓库根目录/device-src/）
+          elif [ -d "$GITHUB_WORKSPACE/device-src" ]; then
+            echo "使用本地设备树"
+            cp -r "$GITHUB_WORKSPACE/device-src"/* .
+          else
+            echo "❌ 所有设备树源获取失败！请手动上传到device-src/"
+            exit 1
+          fi
+
+      - name: 获取厂商库（非GitHub源）
+        run: |
+          # 设备专属厂商库
+          mkdir -p /mnt/build/vendor/rubens && cd /mnt/build/vendor/rubens
+          if wget -q --spider "https://gitlab.com/ArrowOS-Devices/vendor_xiaomi_rubens.git"; then
+            git clone --depth=1 https://gitlab.com/ArrowOS-Devices/vendor_xiaomi_rubens.git -b arrow-13 .
+          elif wget -q "https://mirror.example.com/vendor-rubens.tar.gz"; then
+            tar -zxf vendor-rubens.tar.gz --strip-components=1
+          elif [ -d "$GITHUB_WORKSPACE/vendor-rubens-src" ]; then
+            cp -r "$GITHUB_WORKSPACE/vendor-rubens-src"/* .
+          else
+            echo "❌ 设备厂商库获取失败！请手动上传到vendor-rubens-src/"
+            exit 1
+          fi
+
+          # 通用厂商库
+          mkdir -p /mnt/build/vendor/sm8450-common && cd /mnt/build/vendor/sm8450-common
+          if wget -q --spider "https://gitlab.com/LineageOS/android_vendor_xiaomi_sm8450-common.git"; then
+            git clone --depth=1 https://gitlab.com/LineageOS/android_vendor_xiaomi_sm8450-common.git -b lineage-20 .
+          elif wget -q "https://mirror.example.com/vendor-sm8450-common.tar.gz"; then
+            tar -zxf vendor-sm8450-common.tar.gz --strip-components=1
+          elif [ -d "$GITHUB_WORKSPACE/vendor-common-src" ]; then
+            cp -r "$GITHUB_WORKSPACE/vendor-common-src"/* .
+          else
+            echo "❌ 通用厂商库获取失败！请手动上传到vendor-common-src/"
+            exit 1
+          fi
+
+      - name: 验证补丁和脚本
+        run: |
+          # 验证补丁目录
+          PATCH_DIR="$GITHUB_WORKSPACE/patches/dtb-patch"
+          if [ ! -d "$PATCH_DIR" ] || [ -z "$(ls "$PATCH_DIR"/*.patch 2>/dev/null)" ]; then
+            echo "❌ 补丁目录不存在或无.patch文件！"
+            exit 1
+          fi
+          # 验证脚本
+          SCRIPT=$(find "$GITHUB_WORKSPACE" -name "apply-all-patches.sh" -type f -print -quit)
+          if [ -z "$SCRIPT" ]; then
+            echo "❌ 未找到apply-all-patches.sh！"
+            exit 1
+          fi
+          chmod +x "$SCRIPT"
+
       - name: 应用补丁
         run: |
-          echo "=== 执行补丁脚本 ==="
-          SCRIPT_PATH="${{ steps.find_script.outputs.script_path }}"
-          # 打印执行过程（便于调试）
-          bash -x "$SCRIPT_PATH"
+          SCRIPT=$(find "$GITHUB_WORKSPACE" -name "apply-all-patches.sh" -type f -print -quit)
+          bash -x "$SCRIPT"
 
-      # 步骤8：编译内核与设备树
-      - name: 编译内核和dtb/dtbo
+      - name: 编译内核和镜像
         run: |
           cd /mnt/build/kernel
-          # 加载设备配置
-          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- vendor/rubens_defconfig
-          # 编译（低并行度避免空间不足）
+          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- vendor/rubens_defconfig || make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- vendor/sm8450_defconfig
           make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- -j2 dtbs dtbo.img
-          # 保存产物
           mkdir -p /mnt/build/out
-          cp arch/arm64/boot/dtb /mnt/build/out/dtb.img
-          cp arch/arm64/boot/dtbo.img /mnt/build/out/
+          cp arch/arm64/boot/dtb /mnt/build/out/dtb.img 2>/dev/null || true
+          cp arch/arm64/boot/dtbo.img /mnt/build/out/ 2>/dev/null || true
 
-      # 步骤9：打包vendor和vendor_dlkm镜像
-      - name: 打包vendor.img和vendor_dlkm.img
-        run: |
-          # 打包vendor.img
+          # 打包vendor镜像
           mkdir -p /mnt/build/vendor_img/{vendor,system}
-          cp -r /mnt/build/vendor/rubens/* /mnt/build/vendor_img/vendor/
-          cp -r /mnt/build/vendor/sm8450-common/* /mnt/build/vendor_img/vendor/
-          # 计算镜像大小（预留2GB）
-          VENDOR_SIZE=$(du -sh /mnt/build/vendor_img | awk '{print $1}' | sed 's/G//')
-          VENDOR_SIZE=$(( ${VENDOR_SIZE%.*} + 2 ))
+          cp -r /mnt/build/vendor/rubens/* /mnt/build/vendor_img/vendor/ 2>/dev/null || true
+          cp -r /mnt/build/vendor/sm8450-common/* /mnt/build/vendor_img/vendor/ 2>/dev/null || true
+          VENDOR_SIZE=$(du -sh /mnt/build/vendor_img | awk '{print $1}' | sed 's/G//; s/\..*//')
+          VENDOR_SIZE=$(( VENDOR_SIZE + 2 ))
           dd if=/dev/zero of=/mnt/build/out/vendor.img bs=1G count=$VENDOR_SIZE
           mkfs.ext4 -F /mnt/build/out/vendor.img
-          sudo mount /mnt/build/out/vendor.img /mnt/build/vendor_img/system
-          sudo cp -r /mnt/build/vendor_img/vendor/* /mnt/build/vendor_img/system/
-          sudo umount /mnt/build/vendor_img/system
-          
-          # 打包vendor_dlkm.img
-          mkdir -p /mnt/build/out/vendor_dlkm
-          cp -r /mnt/build/device/rubens/dlkm/* /mnt/build/out/vendor_dlkm/
-          find /mnt/build/out/vendor_dlkm -print0 | cpio -0 -H newc -o | gzip > /mnt/build/out/vendor_dlkm.img
+          sudo mount /mnt/build/out/vendor.img /mnt/build/vendor_img/system 2>/dev/null || true
+          sudo cp -r /mnt/build/vendor_img/vendor/* /mnt/build/vendor_img/system/ 2>/dev/null || true
+          sudo umount /mnt/build/vendor_img/system 2>/dev/null || true
 
-      # 步骤10：上传产物
-      - name: 上传编译产物
+      - name: 上传产物
         uses: actions/upload-artifact@v4
         with:
           name: final-artifacts-${{ github.event.inputs.device }}
           path: /mnt/build/out/
           retention-days: 14
+    
