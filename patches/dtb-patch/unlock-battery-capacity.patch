@@ -1,15 +1,9 @@
-diff --git a/dts/sm8450-common.dtsi b/dts/sm8450-common.dtsi
-index 2d1e3f4..3a5b7c9 100644
---- a/dts/sm8450-common.dtsi
-+++ b/dts/sm8450-common.dtsi
-@@ -389,8 +389,8 @@
-        compatible = "qcom,pm8350b-bms";
-        reg = <0x0008 0x0010>;
-        interrupts = <0x0 0x08 0x0 IRQ_TYPE_EDGE_RISING>;
--       qcom,charge-full-capacity = <4900>;  /* 通用限制值 */
--       qcom,charge-term-current = <1000>;
-+       qcom,charge-full-capacity = <5000>;  /* diting实际电池容量 */
-+       qcom,charge-term-current = <500>;  /* 优化充电终止电流 */
-        qcom,pre-charge-current = <256000>;
-        qcom,fast-charge-current = <3000000>;  /* 保留3A快充 */
- };
+diff --git a/properties/vendor.prop b/properties/vendor.prop
+index 5f7b3d2..9a1c7e4 100644
+--- a/properties/vendor.prop
++++ b/properties/vendor.prop
+@@ -42,3 +42,4 @@ vendor.audio.offload.buffer.size.kb=256
+ # Battery
+ vendor.charging.speed=3000  # 3A快充
+ vendor.battery.capacity=5000  # 强制识别电池容量为5000mAh
++vendor.battery.full_capacity=5000  # 解锁满电容量限制
