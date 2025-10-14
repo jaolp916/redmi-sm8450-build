@@ -1,0 +1,17 @@
+# 针对红米SM8450设备的电池配置文件（需根据实际路径调整）
+diff --git a/arch/arm64/boot/dts/qcom/sm8450-redmi-rubens.dts b/arch/arm64/boot/dts/qcom/sm8450-redmi-rubens.dts
+index 2d7f1a3..c8b9d0e 100644
+--- a/arch/arm64/boot/dts/qcom/sm8450-redmi-rubens.dts
++++ b/arch/arm64/boot/dts/qcom/sm8450-redmi-rubens.dts
+@@ -1230,8 +1230,8 @@
+        battery {
+                compatible = "qcom,battery";
+                battery-type = "lipolymer";
+-               capacity = <5000>;  // 原厂限制容量（mAh）
+-               voltage-max-design = <4350000>;  // 原厂限制最大电压
++               capacity = <5500>;  // 新电芯实际容量（根据你的电芯修改）
++               voltage-max-design = <4400000>;  // 新电芯最大电压（参考电芯规格）
+                voltage-min-design = <3000000>;
+                precharge-current = <256000>;
+                charge-term-current = <100000>;  // 降低终止电流，允许满充
+        };
