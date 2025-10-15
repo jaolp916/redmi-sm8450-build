@@ -115,48 +115,87 @@ jobs:
             exit 1
           fi
 
-      - name: 验证补丁和脚本
+      - name: 直接修改所有配置（跳过补丁）
         run: |
-          # 验证补丁目录
-          PATCH_DIR="$GITHUB_WORKSPACE/patches/dtb-patch"
-          if [ ! -d "$PATCH_DIR" ] || [ -z "$(ls "$PATCH_DIR"/*.patch 2>/dev/null)" ]; then
-            echo "❌ 补丁目录不存在或无.patch文件！"
-            exit 1
-          fi
-          # 验证脚本
-          SCRIPT=$(find "$GITHUB_WORKSPACE" -name "apply-all-patches.sh" -type f -print -quit)
-          if [ -z "$SCRIPT" ]; then
-            echo "❌ 未找到apply-all-patches.sh！"
-            exit 1
-          fi
-          chmod +x "$SCRIPT"
-
-      - name: 应用补丁（包含通用仓库）
-        run: |
-          # 定义设备仓库和通用仓库路径
+          # 定义仓库路径
           DEVICE_DIR="/mnt/build/device/xiaomi/diting"
           COMMON_DIR="/mnt/build/device/xiaomi/sm8450-common"
-          PATCH_DIR="$GITHUB_WORKSPACE/patches/dtb-patch"
-
-          # 1. 先向diting设备仓库应用补丁
-          echo "=== 向diting设备仓库应用补丁 ==="
-          cd "$DEVICE_DIR"
-          for patch in "$PATCH_DIR"/*.patch; do
-          patch_name=$(basename "$patch")
-          echo "应用到diting：$patch_name"
-          if ! git apply "$patch" && ! patch -p1 < "$patch"; then
-          echo "⚠️ 补丁 $patch_name 在diting仓库不适用，尝试通用仓库"
-          # 2. 若设备仓库不适用，向通用仓库应用（因配置可能继承自通用仓库）
-          cd "$COMMON_DIR"
-          if git apply "$patch" || patch -p1 < "$patch"; then
-          echo "✅ 补丁 $patch_name 在通用仓库应用成功"
+    
+          # --------------------------
+          # 1. 显示配置修改（120Hz刷新率）
+          # --------------------------
+          echo "=== 配置显示参数 ==="
+          display_props=(
+          "$DEVICE_DIR/properties/system.prop"
+          "$COMMON_DIR/properties/system.prop"
+          "$DEVICE_DIR/system.prop"  # 可能的路径2
+          "$COMMON_DIR/system.prop"  # 可能的路径2
+          )
+          for prop_file in "${display_props[@]}"; do
+          mkdir -p "$(dirname "$prop_file")" && touch "$prop_file"
+          # 设置刷新率
+          [ $(grep -c "^ro.sf.refresh_rate=" "$prop_file") -eq 0 ] && \
+          echo "ro.sf.refresh_rate=120" >> "$prop_file" || \
+          sed -i "s/^ro.sf.refresh_rate=.*/ro.sf.refresh_rate=120/" "$prop_file"
+          # 厂商显示框架配置
+          [ $(grep -c "^persist.vendor.display.hz=" "$prop_file") -eq 0 ] && \
+          echo "persist.vendor.display.hz=120" >> "$prop_file" || \
+          sed -i "s/^persist.vendor.display.hz=.*/persist.vendor.display.hz=120/" "$prop_file"
+          done
+    
+          # --------------------------
+          # 2. 电池容量解锁（5000mAh）
+          # --------------------------
+          echo "=== 配置电池参数 ==="
+          battery_props=(
+          "$DEVICE_DIR/properties/vendor.prop"
+          "$COMMON_DIR/properties/vendor.prop"
+          "$DEVICE_DIR/vendor.prop"  # 可能的路径2
+          "$COMMON_DIR/vendor.prop"  # 可能的路径2
+          )
+          for prop_file in "${battery_props[@]}"; do
+          mkdir -p "$(dirname "$prop_file")" && touch "$prop_file"
+          # 报告电池容量
+          [ $(grep -c "^vendor.battery.reported_capacity=" "$prop_file") -eq 0 ] && \
+          echo "vendor.battery.reported_capacity=5000" >> "$prop_file" || \
+          sed -i "s/^vendor.battery.reported_capacity=.*/vendor.battery.reported_capacity=5000/" "$prop_file"
+          # 满电容量限制
+          [ $(grep -c "^vendor.battery.full_capacity=" "$prop_file") -eq 0 ] && \
+          echo "vendor.battery.full_capacity=5000" >> "$prop_file" || \
+          sed -i "s/^vendor.battery.full_capacity=.*/vendor.battery.full_capacity=5000/" "$prop_file"
+          done
+    
+          # --------------------------
+          # 3. 系统分区解锁（可读写）
+          # --------------------------
+          echo "=== 配置系统分区 ==="
+          fstab_files=(
+          "$DEVICE_DIR/rootdir/etc/fstab.qcom"
+          "$COMMON_DIR/rootdir/etc/fstab.qcom"
+          "$DEVICE_DIR/fstab.qcom"  # 可能的路径2
+          )
+          for fstab in "${fstab_files[@]}"; do
+          if [ -f "$fstab" ]; then
+          # 将/sys分区的ro（只读）改为rw（可读写）
+          sed -i "s|/dev/block/bootdevice/by-name/sys.*ext4.*ro,|/dev/block/bootdevice/by-name/sys       /sys            ext4    rw,|g" "$fstab"
+          echo "✅ 已修改 $fstab 的系统分区配置"
           else
-          echo "❌ 补丁 $patch_name 应用失败"
-          exit 1
-          fi
-          cd "$DEVICE_DIR"  # 回到设备仓库目录
+          echo "⚠️ 未找到 $fstab，跳过"
           fi
           done
+    
+          # --------------------------
+          # 验证所有配置
+          # --------------------------
+          echo "=== 验证显示配置 ==="
+          grep -r "ro.sf.refresh_rate=120" "$DEVICE_DIR" "$COMMON_DIR"
+    
+          echo "=== 验证电池配置 ==="
+          grep -r "vendor.battery.reported_capacity=5000" "$DEVICE_DIR" "$COMMON_DIR"
+    
+          echo "=== 验证分区配置 ==="
+          grep -r "/sys.*ext4.*rw," "$DEVICE_DIR" "$COMMON_DIR"
+
 
 
       - name: 编译内核和镜像（修正：使用diting配置）
