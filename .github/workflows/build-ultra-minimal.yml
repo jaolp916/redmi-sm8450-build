@@ -1,11 +1,10 @@
-name: 非GitHub源编译工作流（无GitHub依赖）
+name: 编译
 on:
   workflow_dispatch:
     inputs:
       device:
         default: "rubens"
         type: string
-
 jobs:
   build:
     runs-on: ubuntu-22.04
@@ -58,18 +57,19 @@ jobs:
             exit 1
           fi
 
-      - name: 获取设备树（非GitHub源）
+      - name: 获取设备树（修正路径：diting设备树→正确目录）
         run: |
-          mkdir -p /mnt/build/device/rubens && cd /mnt/build/device/rubens
-          # 方案1：GitLab社区设备树
+          # 关键修复1：设备树目录改为 /mnt/build/device/xiaomi/diting（与后续补丁路径匹配）
+          mkdir -p /mnt/build/device/xiaomi/diting && cd /mnt/build/device/xiaomi/diting
+          # 方案1：拉取diting官方设备树（优先）
           if wget -q --spider "https://github.com/LineageOS/android_device_xiaomi_diting.git"; then
             git clone --depth=1 https://github.com/LineageOS/android_device_xiaomi_diting.git -b lineage-23.0 .
-          # 方案2：Codeberg备份
+          # 方案2：Codeberg备份（rubens/diting通用）
           elif wget -q --spider "https://codeberg.org/ProjectElixir/device_xiaomi_rubens.git"; then
             git clone --depth=1 https://codeberg.org/ProjectElixir/device_xiaomi_rubens.git -b 14 .
           # 方案3：直接下载tar包
-          elif wget -q "https://mirror.example.com/device-rubens.tar.gz"; then
-            tar -zxf device-rubens.tar.gz --strip-components=1
+          elif wget -q "https://mirror.example.com/device-diting.tar.gz"; then
+            tar -zxf device-diting.tar.gz --strip-components=1
           # 方案4：使用本地设备树（仓库根目录/device-src/）
           elif [ -d "$GITHUB_WORKSPACE/device-src" ]; then
             echo "使用本地设备树"
@@ -79,21 +79,23 @@ jobs:
             exit 1
           fi
 
-      - name: 获取厂商库（非GitHub源）
+      - name: 获取厂商库（修正：diting厂商库→正确目录）
         run: |
-          # 设备专属厂商库
-          mkdir -p /mnt/build/vendor/rubens && cd /mnt/build/vendor/rubens
+          # 关键修复2：厂商库目录改为 /mnt/build/vendor/xiaomi/diting（符合Android规范）
+          mkdir -p /mnt/build/vendor/xiaomi/diting && cd /mnt/build/vendor/xiaomi/diting
+          # 方案1：拉取diting官方厂商库
           if wget -q --spider "https://github.com/TheMuppets/proprietary_vendor_xiaomi_diting.git"; then
             git clone --depth=1 https://github.com/TheMuppets/proprietary_vendor_xiaomi_diting.git -b lineage-23.0 .
-          elif wget -q "https://mirror.example.com/vendor-rubens.tar.gz"; then
-            tar -zxf vendor-rubens.tar.gz --strip-components=1
-          elif [ -d "$GITHUB_WORKSPACE/vendor-rubens-src" ]; then
-            cp -r "$GITHUB_WORKSPACE/vendor-rubens-src"/* .
+          # 方案2：直接下载tar包
+          elif wget -q "https://mirror.example.com/vendor-diting.tar.gz"; then
+            tar -zxf vendor-diting.tar.gz --strip-components=1
+          # 方案3：使用本地厂商库（仓库根目录/vendor-diting-src/）
+          elif [ -d "$GITHUB_WORKSPACE/vendor-diting-src" ]; then
+            cp -r "$GITHUB_WORKSPACE/vendor-diting-src"/* .
           else
-            echo "❌ 设备厂商库获取失败！请手动上传到vendor-rubens-src/"
+            echo "❌ 设备厂商库获取失败！请手动上传到vendor-diting-src/"
             exit 1
           fi
-
 
       - name: 验证补丁和脚本
         run: |
@@ -111,72 +113,78 @@ jobs:
           fi
           chmod +x "$SCRIPT"
 
-      - name: 应用设备补丁（修正版）
+      - name: 应用设备补丁（修正版：定义变量+正确目录）
         run: |
-          # 1. 定义路径（根据实际环境调整）
-          PATCH_DIR="/home/runner/work/redmi-sm8450-build/redmi-sm8450-build/patches/dtb-patch"
-          DEVICE_DIR="/mnt/build/device/xiaomi/diting"  # 设备仓库目录（关键）
+          # 关键修复3：明确定义设备仓库目录和补丁目录（解决变量未定义问题）
+          DEVICE_DIR="/mnt/build/device/xiaomi/diting"
+          PATCH_DIR="$GITHUB_WORKSPACE/patches/dtb-patch"
 
-          # 2. 验证设备仓库和目标文件存在
           echo "=== 验证文件存在性 ==="
+          # 验证设备仓库是否存在
           if [ ! -d "$DEVICE_DIR" ]; then
-          echo "❌ 设备仓库不存在：$DEVICE_DIR"
-          exit 1
+            echo "❌ 设备仓库不存在：$DEVICE_DIR"
+            exit 1
           fi
-
+          # 验证目标prop文件是否存在（若不存在则提示可用文件）
           TARGET_PROP="$DEVICE_DIR/properties/system.prop"
           if [ ! -f "$TARGET_PROP" ]; then
-          echo "❌ 目标文件不存在：$TARGET_PROP"
-          echo "仓库中实际存在的.prop文件："
-          find "$DEVICE_DIR" -name "*.prop"  # 显示所有可用的prop文件
-          exit 1
+            echo "❌ 目标文件不存在：$TARGET_PROP"
+            echo "仓库中实际存在的.prop文件："
+            find "$DEVICE_DIR" -name "*.prop"  # 显示所有可用的prop文件，便于后续调整补丁
+            exit 1
           fi
 
-          # 3. 进入设备仓库目录，确保Git能识别文件
+          # 进入设备仓库目录（确保相对路径生效）
           cd "$DEVICE_DIR"
           echo "=== 当前工作目录：$(pwd) ==="
 
-          # 4. 检查文件是否被Git跟踪（未跟踪会导致git apply失败）
+          # 检查文件是否被Git跟踪（未跟踪会导致git apply失败）
           if ! git ls-files --error-unmatch "properties/system.prop" >/dev/null 2>&1; then
-          echo "⚠️ 文件未被Git跟踪，手动添加"
-          git add "properties/system.prop"
-          git commit -m "临时添加未跟踪的prop文件"  # 提交后Git即可识别
+            echo "⚠️ 文件未被Git跟踪，手动添加"
+            git add "properties/system.prop"
+            git commit -m "临时添加未跟踪的prop文件"  # 提交后Git即可识别
           fi
 
-          # 5. 应用补丁（在设备仓库目录中执行）
+          # 应用补丁（在设备仓库目录中执行）
           echo "=== 开始应用补丁 ==="
           for patch in "$PATCH_DIR"/*.patch; do
-          if [ -f "$patch" ]; then
-          patch_name=$(basename "$patch")
-          echo "应用：$patch_name"
-          # 优先使用git apply
-          if git apply "$patch"; then
-          echo "✅ 补丁 $patch_name 应用成功"
-          else
-          # 失败时用patch命令强制应用
-          echo "⚠️ git apply失败，尝试patch命令"
-          patch -p1 < "$patch" || {
-            echo "❌ 补丁 $patch_name 应用失败"
-            exit 1
-          }
-          fi
-          fi
+            if [ -f "$patch" ]; then
+              patch_name=$(basename "$patch")
+              echo "应用：$patch_name"
+              # 优先使用git apply（保留Git历史）
+              if git apply "$patch"; then
+                echo "✅ 补丁 $patch_name 应用成功"
+              else
+                # 失败时用patch命令强制应用（不依赖Git，直接修改文件）
+                echo "⚠️ git apply失败，尝试patch命令"
+                patch -p1 < "$patch" || {
+                  echo "❌ 补丁 $patch_name 应用失败"
+                  exit 1
+                }
+              fi
+            fi
           done
-    
 
-      - name: 编译内核和镜像
+      - name: 编译内核和镜像（修正：使用diting配置）
         run: |
           cd /mnt/build/kernel
-          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- vendor/rubens_defconfig || make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- vendor/sm8450_defconfig
+          # 关键修复4：优先使用diting专属配置，其次用SM8450通用配置
+          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- vendor/diting_defconfig || \
+          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- vendor/sm8450_defconfig
+          # 编译设备树和镜像（-j2适配GitHub Runner性能）
           make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- -j2 dtbs dtbo.img
+
+          # 整理输出产物
           mkdir -p /mnt/build/out
           cp arch/arm64/boot/dtb /mnt/build/out/dtb.img 2>/dev/null || true
           cp arch/arm64/boot/dtbo.img /mnt/build/out/ 2>/dev/null || true
 
-          # 打包vendor镜像
+          # 打包vendor镜像（修正：使用diting厂商库目录）
           mkdir -p /mnt/build/vendor_img/{vendor,system}
-          cp -r /mnt/build/vendor/rubens/* /mnt/build/vendor_img/vendor/ 2>/dev/null || true
-          cp -r /mnt/build/vendor/sm8450-common/* /mnt/build/vendor_img/vendor/ 2>/dev/null || true
+          cp -r /mnt/build/vendor/xiaomi/diting/* /mnt/build/vendor_img/vendor/ 2>/dev/null || true
+          cp -r /mnt/build/vendor/xiaomi/sm8450-common/* /mnt/build/vendor_img/vendor/ 2>/dev/null || true
+          
+          # 计算vendor镜像大小（预留2G空间）
           VENDOR_SIZE=$(du -sh /mnt/build/vendor_img | awk '{print $1}' | sed 's/G//; s/\..*//')
           VENDOR_SIZE=$(( VENDOR_SIZE + 2 ))
           dd if=/dev/zero of=/mnt/build/out/vendor.img bs=1G count=$VENDOR_SIZE
@@ -191,4 +199,3 @@ jobs:
           name: final-artifacts-${{ github.event.inputs.device }}
           path: /mnt/build/out/
           retention-days: 14
-    
