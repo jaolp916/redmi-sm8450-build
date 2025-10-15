@@ -205,33 +205,50 @@ jobs:
           fi
 
 
-      - name: 编译内核和镜像（修正：使用diting配置）
+      - name: 编译内核和镜像（适配GKI配置）
         run: |
           cd /mnt/build/kernel
-          # 关键修复4：优先使用diting专属配置，其次用SM8450通用配置
-          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- vendor/diting_defconfig || \
-          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- vendor/sm8450_defconfig
-          # 编译设备树和镜像（-j2适配GitHub Runner性能）
-          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- -j2 dtbs dtbo.img
+          # 定义GKI基础配置和厂商配置（根据实际文件调整）
+          GKI_BASE_CONFIG="arch/arm64/configs/gki_defconfig"  # GKI通用基础配置
+          VENDOR_CONFIGS=(
+          "arch/arm64/configs/vendor/diting_GKI.config"     # 优先：diting专属GKI配置
+          "arch/arm64/configs/vendor/xiaomi_GKI.config"     # 其次：小米通用GKI配置
+          )
 
-          # 整理输出产物
+          # 1. 验证GKI基础配置是否存在
+          if [ ! -f "$GKI_BASE_CONFIG" ]; then
+          echo "❌ 未找到GKI基础配置：$GKI_BASE_CONFIG"
+          # 尝试搜索其他可能的GKI基础配置
+          GKI_BASE_CONFIG=$(find arch/arm64/configs/ -name "*gki*.defconfig" | head -n 1)
+          if [ -z "$GKI_BASE_CONFIG" ]; then
+          echo "❌ 未找到任何GKI基础配置"
+          exit 1
+          fi
+          echo "⚠️ 使用替代GKI基础配置：$GKI_BASE_CONFIG"
+          fi
+
+          # 2. 查找可用的厂商GKI配置
+          for vendor_config in "${VENDOR_CONFIGS[@]}"; do
+          if [ -f "$vendor_config" ]; then
+          echo "=== 找到厂商GKI配置：$vendor_config ==="
+          # 3. 结合GKI基础配置和厂商配置（关键步骤）
+          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- "$(basename "$GKI_BASE_CONFIG")"
+          # 应用厂商配置片段（覆盖GKI基础配置中的厂商专属部分）
+          cat "$vendor_config" | make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- -j2 olddefconfig
+          # 4. 编译设备树和镜像
+          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- -j2 dtbs dtbo.img
+          # 5. 输出产物
           mkdir -p /mnt/build/out
           cp arch/arm64/boot/dtb /mnt/build/out/dtb.img 2>/dev/null || true
           cp arch/arm64/boot/dtbo.img /mnt/build/out/ 2>/dev/null || true
+          exit 0
+          fi
+          done
 
-          # 打包vendor镜像（修正：使用diting厂商库目录）
-          mkdir -p /mnt/build/vendor_img/{vendor,system}
-          cp -r /mnt/build/vendor/xiaomi/diting/* /mnt/build/vendor_img/vendor/ 2>/dev/null || true
-          cp -r /mnt/build/vendor/xiaomi/sm8450-common/* /mnt/build/vendor_img/vendor/ 2>/dev/null || true
-          
-          # 计算vendor镜像大小（预留2G空间）
-          VENDOR_SIZE=$(du -sh /mnt/build/vendor_img | awk '{print $1}' | sed 's/G//; s/\..*//')
-          VENDOR_SIZE=$(( VENDOR_SIZE + 2 ))
-          dd if=/dev/zero of=/mnt/build/out/vendor.img bs=1G count=$VENDOR_SIZE
-          mkfs.ext4 -F /mnt/build/out/vendor.img
-          sudo mount /mnt/build/out/vendor.img /mnt/build/vendor_img/system 2>/dev/null || true
-          sudo cp -r /mnt/build/vendor_img/vendor/* /mnt/build/vendor_img/system/ 2>/dev/null || true
-          sudo umount /mnt/build/vendor_img/system 2>/dev/null || true
+          # 如果未找到厂商GKI配置
+          echo "❌ 未找到任何厂商GKI配置！请检查："
+          ls arch/arm64/configs/vendor/  # 显示vendor目录下的所有配置
+          exit 1
 
       - name: 上传产物
         uses: actions/upload-artifact@v4
