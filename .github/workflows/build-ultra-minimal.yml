@@ -111,10 +111,58 @@ jobs:
           fi
           chmod +x "$SCRIPT"
 
-      - name: 应用补丁
+      - name: 应用设备补丁（修正版）
         run: |
-          SCRIPT=$(find "$GITHUB_WORKSPACE" -name "apply-all-patches.sh" -type f -print -quit)
-          bash -x "$SCRIPT"
+          # 1. 定义路径（根据实际环境调整）
+          PATCH_DIR="/home/runner/work/redmi-sm8450-build/redmi-sm8450-build/patches/dtb-patch"
+          DEVICE_DIR="/mnt/build/device/xiaomi/diting"  # 设备仓库目录（关键）
+
+          # 2. 验证设备仓库和目标文件存在
+          echo "=== 验证文件存在性 ==="
+          if [ ! -d "$DEVICE_DIR" ]; then
+          echo "❌ 设备仓库不存在：$DEVICE_DIR"
+          exit 1
+          fi
+
+          TARGET_PROP="$DEVICE_DIR/properties/system.prop"
+          if [ ! -f "$TARGET_PROP" ]; then
+          echo "❌ 目标文件不存在：$TARGET_PROP"
+          echo "仓库中实际存在的.prop文件："
+          find "$DEVICE_DIR" -name "*.prop"  # 显示所有可用的prop文件
+          exit 1
+          fi
+
+          # 3. 进入设备仓库目录，确保Git能识别文件
+          cd "$DEVICE_DIR"
+          echo "=== 当前工作目录：$(pwd) ==="
+
+          # 4. 检查文件是否被Git跟踪（未跟踪会导致git apply失败）
+          if ! git ls-files --error-unmatch "properties/system.prop" >/dev/null 2>&1; then
+          echo "⚠️ 文件未被Git跟踪，手动添加"
+          git add "properties/system.prop"
+          git commit -m "临时添加未跟踪的prop文件"  # 提交后Git即可识别
+          fi
+
+          # 5. 应用补丁（在设备仓库目录中执行）
+          echo "=== 开始应用补丁 ==="
+          for patch in "$PATCH_DIR"/*.patch; do
+          if [ -f "$patch" ]; then
+          patch_name=$(basename "$patch")
+          echo "应用：$patch_name"
+          # 优先使用git apply
+          if git apply "$patch"; then
+          echo "✅ 补丁 $patch_name 应用成功"
+          else
+          # 失败时用patch命令强制应用
+          echo "⚠️ git apply失败，尝试patch命令"
+          patch -p1 < "$patch" || {
+            echo "❌ 补丁 $patch_name 应用失败"
+            exit 1
+          }
+          fi
+          fi
+          done
+    
 
       - name: 编译内核和镜像
         run: |
