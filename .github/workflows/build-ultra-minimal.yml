@@ -75,6 +75,26 @@ jobs:
           echo "=== 验证设备仓库文件 ==="
           ls -la properties/  # 检查properties目录是否存在且有内容
           [ -f "BoardConfig.mk" ] && echo "✅ 找到BoardConfig.mk" || echo "❌ 缺失BoardConfig.mk"
+
+      - name: 克隆sm8450-common通用设备树（关键依赖）
+        run: |
+          # 创建通用设备树目录（与diting设备仓库同级）
+          mkdir -p /mnt/build/device/xiaomi/sm8450-common && cd /mnt/build/device/xiaomi/sm8450-common
+    
+          # 克隆lineage-23.0分支（必须与diting仓库分支一致）
+          echo "=== 克隆sm8450-common通用设备树 ==="
+          git clone --depth=1 -b lineage-23.0 \
+          https://github.com/LineageOS/android_device_xiaomi_sm8450-common.git . || {
+          echo "❌ 通用设备树克隆失败，尝试镜像源"
+          git clone --depth=1 -b lineage-23.0 \
+          https://mirrorbits.lineageos.org/git/device/xiaomi/sm8450-common.git .
+          }
+    
+          # 验证通用仓库核心文件
+          echo "=== 验证通用设备树文件 ==="
+          [ -f "BoardConfigCommon.mk" ] && echo "✅ 找到通用配置文件" || echo "❌ 缺失通用配置"
+          ls -la properties/  # 检查是否包含通用属性文件
+
     
 
       - name: 获取厂商库（修正：diting厂商库→正确目录）
