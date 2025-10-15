@@ -39,7 +39,7 @@ jobs:
           mkdir -p /mnt/build/kernel && cd /mnt/build/kernel
           # 方案1：使用GitLab的Android内核源（小米SM8450通用）
           if wget -q --spider "https://github.com/LineageOS/android_kernel_xiaomi_sm8450.git"; then
-            git clone --depth=1 https://github.com/LineageOS/android_kernel_xiaomi_sm8450.git -b lineage-23.0 .
+            git clone --depth=1 https://github.com/LineageOS/android_kernel_xiaomi_sm8450.git -b lineage-23 .
           # 方案2：使用Codeberg的社区备份源
           elif wget -q --spider "https://codeberg.org/Xiaomi-SM8450/android_kernel_xiaomi_sm8450.git"; then
             git clone --depth=1 https://codeberg.org/Xiaomi-SM8450/android_kernel_xiaomi_sm8450.git -b main .
@@ -63,7 +63,7 @@ jobs:
           mkdir -p /mnt/build/device/xiaomi/diting && cd /mnt/build/device/xiaomi/diting
           # 方案1：拉取diting官方设备树（优先）
           if wget -q --spider "https://github.com/LineageOS/android_device_xiaomi_diting.git"; then
-            git clone --depth=1 https://github.com/LineageOS/android_device_xiaomi_diting.git -b lineage-23.0 .
+            git clone --depth=1 https://github.com/LineageOS/android_device_xiaomi_diting.git -b lineage-23 .
           # 方案2：Codeberg备份（rubens/diting通用）
           elif wget -q --spider "https://codeberg.org/ProjectElixir/device_xiaomi_rubens.git"; then
             git clone --depth=1 https://codeberg.org/ProjectElixir/device_xiaomi_rubens.git -b 14 .
@@ -85,7 +85,7 @@ jobs:
           mkdir -p /mnt/build/vendor/xiaomi/diting && cd /mnt/build/vendor/xiaomi/diting
           # 方案1：拉取diting官方厂商库
           if wget -q --spider "https://github.com/TheMuppets/proprietary_vendor_xiaomi_diting.git"; then
-            git clone --depth=1 https://github.com/TheMuppets/proprietary_vendor_xiaomi_diting.git -b lineage-23.0 .
+            git clone --depth=1 https://github.com/TheMuppets/proprietary_vendor_xiaomi_diting.git -b lineage-23 .
           # 方案2：直接下载tar包
           elif wget -q "https://mirror.example.com/vendor-diting.tar.gz"; then
             tar -zxf vendor-diting.tar.gz --strip-components=1
