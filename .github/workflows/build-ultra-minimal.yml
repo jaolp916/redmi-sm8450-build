@@ -34,50 +34,48 @@ jobs:
           sudo mkdir -p /mnt/build
           sudo chown -R $USER:$USER /mnt/build
 
-      - name: 获取内核源码（非GitHub源）
+      - name: 获取内核源码（匹配lineage-23.0）
         run: |
           mkdir -p /mnt/build/kernel && cd /mnt/build/kernel
-          # 方案1：使用GitLab的Android内核源（小米SM8450通用）
-          if wget -q --spider "https://github.com/LineageOS/android_kernel_xiaomi_sm8450.git"; then
-            git clone --depth=1 https://github.com/LineageOS/android_kernel_xiaomi_sm8450.git -b lineage-23.0 .
-          # 方案2：使用Codeberg的社区备份源
-          elif wget -q --spider "https://codeberg.org/Xiaomi-SM8450/android_kernel_xiaomi_sm8450.git"; then
-            git clone --depth=1 https://codeberg.org/Xiaomi-SM8450/android_kernel_xiaomi_sm8450.git -b main .
-          # 方案3：使用直接下载tar包（若有镜像站）
-          elif wget -q "https://mirror.example.com/kernel-sm8450.tar.gz"; then
-            tar -zxf kernel-sm8450.tar.gz --strip-components=1
-          # 方案4：使用你手动上传的本地内核源码（仓库根目录/kernel-src/）
-          elif [ -d "$GITHUB_WORKSPACE/kernel-src" ]; then
-            echo "使用本地内核源码"
-            cp -r "$GITHUB_WORKSPACE/kernel-src"/* .
-          else
-            echo "❌ 所有内核源获取失败！请："
-            echo "1. 在仓库根目录创建kernel-src/，放入内核源码"
-            echo "2. 或更新工作流中的下载链接"
-            exit 1
-          fi
+          # 关键：内核也使用lineage-23.0分支，与设备仓库匹配
+          git clone --depth=1 -b lineage-23.0 \
+          https://github.com/LineageOS/android_kernel_xiaomi_sm8450.git . || {
+          echo "❌ 内核分支克隆失败"
+          exit 1
+          }
+    
 
-      - name: 获取设备树（修正路径：diting设备树→正确目录）
+      - name: 获取设备树（lineage-23.0完整克隆）
         run: |
-          # 关键修复1：设备树目录改为 /mnt/build/device/xiaomi/diting（与后续补丁路径匹配）
           mkdir -p /mnt/build/device/xiaomi/diting && cd /mnt/build/device/xiaomi/diting
-          # 方案1：拉取diting官方设备树（优先）
-          if wget -q --spider "https://github.com/LineageOS/android_device_xiaomi_diting.git"; then
-            git clone --depth=1 https://github.com/LineageOS/android_device_xiaomi_diting.git -b lineage-23.0 .
-          # 方案2：Codeberg备份（rubens/diting通用）
-          elif wget -q --spider "https://codeberg.org/ProjectElixir/device_xiaomi_rubens.git"; then
-            git clone --depth=1 https://codeberg.org/ProjectElixir/device_xiaomi_rubens.git -b 14 .
-          # 方案3：直接下载tar包
-          elif wget -q "https://mirror.example.com/device-diting.tar.gz"; then
-            tar -zxf device-diting.tar.gz --strip-components=1
-          # 方案4：使用本地设备树（仓库根目录/device-src/）
-          elif [ -d "$GITHUB_WORKSPACE/device-src" ]; then
-            echo "使用本地设备树"
-            cp -r "$GITHUB_WORKSPACE/device-src"/* .
-          else
-            echo "❌ 所有设备树源获取失败！请手动上传到device-src/"
-            exit 1
+    
+          # 关键1：强制克隆lineage-23.0分支
+          echo "=== 克隆lineage-23.0分支的diting设备仓库 ==="
+          git clone --depth=1 -b lineage-23.0 \
+          https://github.com/LineageOS/android_device_xiaomi_diting.git . || {
+          echo "❌ 分支克隆失败，尝试官方镜像"
+          git clone --depth=1 -b lineage-23.0 \
+          https://mirrorbits.lineageos.org/git/device/xiaomi/diting.git .
+          }
+    
+          # 关键2：初始化子模块（解决依赖的sm8450-common等通用配置）
+          if [ -f ".gitmodules" ]; then
+          echo "=== 初始化子模块 ==="
+          git submodule update --init --recursive || {
+          echo "⚠️ 子模块初始化失败，尝试手动克隆依赖"
+          # 手动克隆sm8450-common（diting的父级通用配置）
+          mkdir -p ../../sm8450-common && cd ../../sm8450-common
+          git clone --depth=1 -b lineage-23.0 \
+          https://github.com/LineageOS/android_device_xiaomi_sm8450-common.git .
+          cd ../diting  # 返回diting目录
+          }
           fi
+    
+          # 验证核心文件是否存在
+          echo "=== 验证设备仓库文件 ==="
+          ls -la properties/  # 检查properties目录是否存在且有内容
+          [ -f "BoardConfig.mk" ] && echo "✅ 找到BoardConfig.mk" || echo "❌ 缺失BoardConfig.mk"
+    
 
       - name: 获取厂商库（修正：diting厂商库→正确目录）
         run: |
